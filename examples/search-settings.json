@@ -1,0 +1,71 @@
+{
+  "name": "Engineering operations",
+  "objective": "Find practical operations or business-systems roles at engineering and manufacturing companies. Prefer work that combines process improvement, data analysis, and useful automation.",
+  "candidate": {
+    "name": "",
+    "email": "",
+    "location": "",
+    "resume_text": "",
+    "skills": [],
+    "needs_sponsorship": null
+  },
+  "preferences": {
+    "roles": [
+      "Operations Engineer",
+      "Business Systems Engineer"
+    ],
+    "locations": [
+      "Los Angeles, CA"
+    ],
+    "work_modes": [
+      "hybrid",
+      "remote"
+    ],
+    "strict_work_mode": false,
+    "salary_min": 100000,
+    "salary_currency": "USD",
+    "relocation": "no",
+    "include_company_leads": true,
+    "max_post_age_days": 45
+  },
+  "settings": {
+    "provider": "codex",
+    "model": "",
+    "routes": {
+      "profile": {
+        "provider": "inherit",
+        "model": ""
+      },
+      "discovery": {
+        "provider": "inherit",
+        "model": ""
+      },
+      "research": {
+        "provider": "inherit",
+        "model": ""
+      },
+      "outreach": {
+        "provider": "inherit",
+        "model": ""
+      }
+    },
+    "target_results": 25,
+    "min_fit": 55,
+    "discovery_queries": 6,
+    "max_agent_calls": 80,
+    "max_minutes": 90,
+    "concurrency": 2,
+    "research_pages": 4,
+    "max_cost_usd": 10,
+    "ats_boards": [],
+    "weights": {
+      "role": 20,
+      "skills": 25,
+      "seniority": 10,
+      "location": 15,
+      "compensation": 10,
+      "preferences": 15,
+      "timing": 5
+    }
+  }
+}

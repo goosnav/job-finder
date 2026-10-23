@@ -1,0 +1,3 @@
+company,title,kind,company_url,listing_url,apply_url,location,work_mode,email,email_source
+Example Robotics (fictional),Operations Engineer,open_role,https://robotics.example,https://robotics.example/careers/123,https://robotics.example/careers/123/apply,"Los Angeles, CA",hybrid,careers@robotics.example,https://robotics.example/contact
+Example Systems (fictional),Potential operations work,company_lead,https://systems.example,,,Remote,unknown,,

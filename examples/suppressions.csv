@@ -1,0 +1,3 @@
+kind,value,reason
+email,no-contact@robotics.example,Do not email this address
+domain,excluded.example,Exclude this employer
