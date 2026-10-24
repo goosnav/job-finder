@@ -9,6 +9,7 @@ Fetch `GET /api/session` from the same origin. Keep its token in memory and send
 | GET | `/health/ready` | Readiness, app identity and version |
 | GET | `/api/session` | Session token, local paths, CLI capability status |
 | GET/POST | `/api/searches` | List/create searches; GET returns `{searches}` |
+| POST | `/api/searches/intake` | Multipart `payload` JSON plus optional résumé `file`; atomically create search and document |
 | GET/PATCH | `/api/searches/{id}` | Search, ranked opportunities, runs, counts, résumé documents |
 | POST | `/api/searches/{id}/documents` | Multipart `file`: extract résumé/supporting text |
 | DELETE | `/api/searches/{id}/documents/{document_id}` | Remove document and invalidate dependent research/drafts |
@@ -24,7 +25,7 @@ Fetch `GET /api/session` from the same origin. Keep its token in memory and send
 | GET | `/api/searches/{id}/export?format=csv&scope=all` | CSV/XLSX; scopes `all`, `apply`, `outreach`, `shortlist` |
 | GET/POST | `/api/suppressions` | Global email/domain exclusions |
 | POST | `/api/suppressions/import` | Multipart exclusion CSV |
-| POST | `/api/demo` | Create and run a fictional offline search; returns `{search, run}` |
+| POST | `/api/demo` | Test-only offline fixture; returns `{search, run}`; hidden from the production UI |
 | POST | `/api/quit` | Graceful local server and agent shutdown |
 
 ## Search inputs and task routing
@@ -36,6 +37,13 @@ Preferences include target roles/locations/industries, work modes, annual salary
 minimum and currency, employment types, seniority, must-haves, exclusions,
 relocation, company-lead inclusion, and maximum posting age. Unknown candidate
 facts should remain empty/null rather than being inferred.
+
+`POST /api/searches/intake` accepts the same search object as `POST /api/searches`,
+encoded in the multipart `payload` field. An optional `file` supplies the résumé.
+Extraction and validation finish before the search and document commit together.
+An invalid file leaves no partial search. The response is the saved search object;
+creation does not start an agent call. The GUI accepts a résumé, pasted text,
+target roles, or a description. `objective` defaults to an empty string.
 
 Settings include `provider`, `model`, `routes`, `target_results`, `min_fit`,
 `discovery_queries`, `max_agent_calls`, `max_minutes`, `concurrency`,
@@ -64,8 +72,15 @@ are passed to the installed provider CLI rather than frozen into an app dropdown
 
 PATCH merges nested settings/candidate/preference objects. Edits that could race
 an active run return `409`; pause first. Updates to candidate evidence,
-preferences, or research routes invalidate dependent work. Changing global
-provider between demo and real mode requires a separate search.
+objective, preferences, or the profile route clear the cached profile. Relevant
+candidate, preference, and research-route edits invalidate dependent research
+and approval. Changed targets receive fresh discovery while tracked job history
+remains available. Changing between demo and real mode requires a separate search.
+
+The GUI's **Build search plan** starts `profile` through the same run endpoint.
+`search.profile` contains the summary, `suggested_roles`, `strengths`, `gaps`,
+`unknowns`, and `search_terms`. **Find jobs** starts `report` and reuses a valid
+profile. These are shared service stages, not separate GUI-only workflows.
 
 ## Results, review, and tracking
 

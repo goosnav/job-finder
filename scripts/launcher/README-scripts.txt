@@ -17,9 +17,10 @@ A setup page opens in your default browser. It downloads pinned Python and
 locked dependencies, then opens Job Finder. You do not need to install Python,
 uv, Node.js, Go, or a compiler. First setup needs internet.
 
-Use Generate report, review the jobs, then CSV or Excel.
-Load sample uses fictional data and needs no agent account.
-Live research needs an installed, signed-in Codex or Claude Code CLI.
+Upload your resume or enter targets. Set location, salary, and work arrangement.
+Choose Build search plan, review Plan, then Find jobs. Download CSV or Excel
+from Jobs. Save search saves your inputs without an agent call.
+Search plans and research need an installed, signed-in Codex or Claude Code CLI.
 
 The macOS Apple Silicon command launch has been tested. Windows, Linux, and
 macOS Intel supervisors are built but remain untested on their native systems.

@@ -47,14 +47,23 @@ class Service:
     def __init__(self, root: Path | None = None):
         self.store = Store(root or data_root())
 
-    def create_search(self, raw: dict) -> dict:
+    def create_search(self, raw: dict, *, document: tuple[str, bytes] | None = None) -> dict:
         search = SearchInput.model_validate(raw).model_dump()
         if search["settings"]["provider"] == "demo":
             search["demo"] = True
         elif search["demo"]:
             raise AppError("DEMO-PROVIDER", "Demo searches use the demo provider.")
+        text = files.document_text(*document) if document else ""
+        self._check_document_budget(search, [{"text": text}] if document else [])
         search.update(id=ident(), created_at=now(), updated_at=now(), schema_version=1, profile={}, profile_fingerprint="")
-        self.store.save("searches", search)
+        with self.store.connect() as db:
+            self.store.save_in(db, "searches", search)
+            if document:
+                name, raw_file = document
+                safe_name = Path(name.replace("\\", "/")).name[:200]
+                db.execute("INSERT INTO documents VALUES (?,?,?,?,?,?)", (
+                    ident(), search["id"], safe_name, text, hashlib.sha256(raw_file).hexdigest(), now(),
+                ))
         return search
 
     def assert_idle(self, search_id: str):

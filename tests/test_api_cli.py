@@ -73,6 +73,41 @@ def test_document_and_opportunity_import_via_real_multipart(client):
     assert client.delete(root + "/documents/" + doc["id"], headers=token).status_code == 200
 
 
+def test_resume_intake_saves_file_and_critical_preferences_together(client):
+    payload = {"name": "Resume search", "preferences": {
+        "locations": ["Los Angeles, CA", "San Diego, CA"], "salary_min": 120000,
+        "work_modes": ["hybrid"], "roles": ["Mechanical Engineer"],
+    }}
+    response = client.post("/api/searches/intake", data={"payload": json.dumps(payload)},
+        files={"file": ("resume.txt", b"Fictional engineer with CAD and test fixture experience.", "text/plain")},
+        headers=headers(client))
+    assert response.status_code == 200
+    saved = client.get("/api/searches/" + response.json()["id"]).json()
+    assert saved["search"]["preferences"]["salary_min"] == 120000
+    assert saved["search"]["preferences"]["locations"] == payload["preferences"]["locations"]
+    assert saved["documents"][0]["name"] == "resume.txt"
+    assert not saved["search"]["demo"]
+
+
+def test_invalid_resume_or_payload_does_not_create_partial_search(client):
+    token = headers(client)
+    for payload, filename, raw in (({"name": "Broken resume"}, "resume.pdf", b"not a pdf"), ({"name": ""}, "resume.txt", b"private candidate text")):
+        response = client.post("/api/searches/intake", data={"payload": json.dumps(payload)},
+            files={"file": (filename, raw, "application/octet-stream")}, headers=token)
+        assert response.status_code in {400, 422}
+        assert "private candidate text" not in response.text
+        assert client.get("/api/searches").json()["searches"] == []
+    response = client.post("/api/searches/intake", data={"payload": "invalid json"}, headers=token)
+    assert response.status_code == 422
+
+
+def test_intake_also_accepts_goals_without_a_resume(client):
+    payload = {"name": "Goal search", "objective": "Design test fixtures", "preferences": {"locations": ["Remote US"], "salary_min": 90000}}
+    response = client.post("/api/searches/intake", data={"payload": json.dumps(payload)}, headers=headers(client))
+    assert response.status_code == 200
+    assert response.json()["objective"] == payload["objective"]
+
+
 def test_validation_errors_do_not_echo_resume_inputs(client):
     response = client.post("/api/searches", json={"name": "", "candidate": {"resume_text": "private resume text"}}, headers=headers(client))
     assert response.status_code == 422

@@ -907,6 +907,28 @@ class Jobs:
     def discover(self, ctx: Context):
         plan = prompts.queries(ctx.prompt_search)
         boards = [] if ctx.search["demo"] else ctx.settings["ats_boards"]
+        key = fingerprint(["discovery-v1", ctx.profile_fingerprint(), route_for(ctx.settings, "discovery"), boards])
+        search = self.store.get("searches", ctx.search["id"])
+        if search.get("discovery_fingerprint") != key:
+            previous_input = next(
+                (
+                    run.get("input_fingerprint")
+                    for run in reversed(self.store.list("runs", search["id"]))
+                    if run["id"] != ctx.job_id and run["stage"] in {"report", "pipeline", "discover"}
+                    and run.get("input_fingerprint")
+                ),
+                None,
+            )
+            legacy_changed = previous_input and previous_input != self.store.get("runs", ctx.job_id)["input_fingerprint"]
+            # Preserve tracked jobs without letting an older search fill the new target.
+            previous_ids = (
+                [row["id"] for row in self.store.list("opportunities", search["id"])]
+                if search.get("discovery_fingerprint") or legacy_changed
+                else []
+            )
+            search.update(discovery_fingerprint=key, discovery_previous_ids=previous_ids)
+            self.store.save("searches", search)
+        previous_ids = set(search["discovery_previous_ids"])
         ctx.stage("discover", len(boards) + len(plan))
         profile = ctx.search.get("profile") or {}
         wanted = _tokens(
@@ -918,8 +940,9 @@ class Jobs:
         )
         for board in boards:
             ctx.check()
-            remaining = ctx.settings["target_results"] - len(
-                self.store.list("opportunities", ctx.search["id"])
+            remaining = ctx.settings["target_results"] - sum(
+                row["id"] not in previous_ids
+                for row in self.store.list("opportunities", ctx.search["id"])
             )
             if remaining <= 0:
                 break
@@ -989,7 +1012,7 @@ class Jobs:
         for batch_index, query in enumerate(plan, 1):
             ctx.check()
             existing = self.store.list("opportunities", ctx.search["id"])
-            remaining = ctx.settings["target_results"] - len(existing)
+            remaining = ctx.settings["target_results"] - sum(row["id"] not in previous_ids for row in existing)
             if remaining <= 0:
                 self.store.event(ctx.job_id, "Discovery target reached.")
                 break
@@ -1034,7 +1057,7 @@ class Jobs:
                     "warning",
                 )
                 break
-        count = len(self.store.list("opportunities", ctx.search["id"]))
+        count = sum(row["id"] not in previous_ids for row in self.store.list("opportunities", ctx.search["id"]))
         if count < ctx.settings["target_results"]:
             self.store.event(
                 ctx.job_id,

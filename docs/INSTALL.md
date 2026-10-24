@@ -36,7 +36,9 @@ The release builder produces one ZIP with five launcher images and a shared `app
 
 The macOS launcher requires macOS 13 or later, matching the [minimum supported by its pinned Go toolchain](https://go.dev/doc/go1.27#linker).
 
-First setup requires internet access. Customers do not need to install Python, pip, Go, Node.js, or a compiler to run a built ZIP. Real research does require an installed, authenticated Codex or Claude Code CLI; those subscriptions and provider services are separate from this application. Demo mode does not use an agent.
+First setup requires internet access. Customers do not need to install Python, pip, Go, Node.js, or a compiler to run a built ZIP. Search plans and research require an installed, authenticated Codex or Claude Code CLI. Provider subscriptions and usage limits are separate from this application.
+
+The app opens your saved searches or a blank **New search** form. Upload a résumé or enter targets and a description. Set location, salary, and work arrangement, then choose **Build search plan**. Review **Plan**, choose **Find jobs**, then download **CSV** or **Excel** from **Jobs**. **Save search** saves inputs without a model call. The production UI does not offer demo mode.
 
 These images are unsigned. macOS Gatekeeper and Windows SmartScreen can show trust prompts. Linux file managers may require the launcher executable permission to be enabled. If the AppImage cannot use FUSE, start it with `--appimage-extract-and-run`; the adjacent `app/` path remains unchanged.
 

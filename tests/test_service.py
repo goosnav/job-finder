@@ -50,6 +50,21 @@ def test_demo_is_durable_ranked_and_cannot_enter_action_exports(service):
             service.export(search['id'], scope=scope)
 
 
+def test_intake_rolls_back_when_document_storage_fails(service):
+    with service.store.connect() as db:
+        db.execute("CREATE TRIGGER reject_intake_document BEFORE INSERT ON documents BEGIN SELECT RAISE(ABORT, 'test failure'); END")
+    import sqlite3
+    with pytest.raises(sqlite3.IntegrityError):
+        service.create_search({"name": "Atomic intake"}, document=("resume.txt", b"Fictional CAD engineer."))
+    assert service.store.list("searches") == []
+
+
+def test_intake_checks_combined_resume_size_before_saving(service):
+    with pytest.raises(AppError, match="60,000"):
+        service.create_search({"name": "Oversize", "candidate": {"resume_text": "a" * 40000}}, document=("resume.txt", b"b" * 40000))
+    assert service.store.list("searches") == []
+
+
 def test_roles_at_same_company_are_distinct_and_tracking_urls_dedupe(service, prepared):
     search, opportunity = prepared
     seed = OpportunitySeed.model_validate({key: opportunity[key] for key in OpportunitySeed.model_fields})

@@ -25,3 +25,7 @@ jobs:
       - run: uv run --project app python -m pytest -c app/pyproject.toml tests
       - run: uv run --project app python scripts/launcher/test_packaging.py
       - run: uv run --project app python app/run.py --help
+      - if: runner.os == 'Linux'
+        run: uv run --project app playwright install --with-deps chromium
+      - if: runner.os == 'Linux'
+        run: uv run --project app python scripts/smoke_gui.py

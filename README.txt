@@ -18,8 +18,8 @@ Linux ARM:                    Open Job Finder — Linux ARM64.AppImage
 
 The setup page downloads Python and locked dependencies, then opens the app.
 First setup needs internet. No Python, Node.js or compiler installation is
-required to run this ZIP. For live research, install and sign into Codex or
-Claude Code separately. You can explore the app with Demo first.
+required to run this ZIP. For search plans and research, install and sign into
+Codex or Claude Code separately.
 
 OS PROMPTS
 ----------

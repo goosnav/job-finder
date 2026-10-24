@@ -2,11 +2,9 @@
 
 **Generate a job report from your search parameters. Review the jobs, open the listings, and export CSV or Excel.**
 
-A local app from Goosnav Labs, built around your installed **Codex** or **Claude Code** CLI. Describe the work you want, optionally add a résumé, and run a bounded workflow. Generate a report, compare the roles in the browser, save a shortlist, or open a direct application link. Outreach remains optional. Choose the provider and model separately for profiling, discovery, research, and writing.
+A local app from Goosnav Labs that uses your signed-in **Codex** or **Claude Code** CLI. Upload your résumé or describe your targets, review the search plan, then find jobs. Compare fit, open listings, save jobs, and export a report. Outreach is optional.
 
-![Ranked job opportunities in the Job Finder workspace](docs/screenshots/opportunities.png)
-
-*Fictional demo data. [Fit and evidence](docs/screenshots/opportunity-review.png) · [Outreach review](docs/screenshots/outreach.png) · [Mobile](docs/screenshots/mobile.png).*
+![New search with résumé, targets, location, salary, and work arrangement](docs/screenshots/intake.png)
 
 ## Open the app
 
@@ -18,13 +16,18 @@ Extract the complete **Job-Finder-Script-Preview.zip**, then open the file for y
 | Windows | Double-click `Open Job Finder.cmd`, or run `Open Job Finder.ps1` |
 | Linux | Run `./Open\ Job\ Finder.sh` |
 
-Keep the launch files beside the complete `app/` folder. The default browser opens a setup page immediately, then your reports. Pinned Python and locked dependencies install automatically outside this folder. No Python, uv, Node.js, Go, or compiler installation is needed to use the packaged app. First setup needs internet. Keep the terminal open; use **Quit Job Finder** in the app to stop it.
+Keep the launch files beside the complete `app/` folder. The default browser opens setup, then Job Finder. Pinned Python and locked dependencies install automatically outside this folder. No Python, uv, Node.js, Go, or compiler installation is needed to use the packaged app. First setup needs internet. Keep the terminal open; use **Quit Job Finder** in the app to stop it.
 
 The script preview includes compiled supervisors for macOS, Windows, and Linux on x64 and ARM64. **macOS Apple Silicon launch is verified. The other targets are built but have not passed native acceptance for this revision.** Downloaded unsigned files can trigger OS trust prompts. [Installation and recovery](docs/INSTALL.md).
 
-Select **Load sample** for a fictional demonstration. For your own search, set the parameters and choose **Generate report**. The report workflow profiles, discovers, researches, and checks sources. It does not require an outreach model. Open **Jobs** to review jobs, save a shortlist, track progress, and open original listings. Use **CSV** or **Excel** above the results. Excel starts with a readable **Report** sheet, with the search brief and clickable job links; the detailed data and sources remain on separate sheets.
+1. Upload a PDF, DOCX, TXT, or Markdown résumé, paste résumé text, or enter target roles and a description.
+2. Set locations, work arrangement, minimum annual salary, currency, seniority, and agent. Choose **Build search plan**. **Save search** saves inputs without an agent call.
+3. Review **Plan** for suggested roles, strengths, gaps, and facts to confirm. Choose **Find jobs** to generate the report.
+4. Open **Jobs** to compare fit, open listings, save a shortlist, and track progress. Choose **CSV** or **Excel** to download.
 
-Use **Outreach** to prepare introductions after a report. The shared CLI retains the original full `pipeline` workflow. Demo data stays clearly labeled and cannot enter actionable application or outreach exports.
+Excel opens with a **Report** sheet containing the search brief and clickable job links. Detailed records and source excerpts occupy separate sheets. Use **Inputs** to change your search; relevant edits clear the old plan and analysis. The next report uses your changed targets and preserves tracked job history.
+
+Use **Outreach** to prepare introductions after a report. The app opens your searches without demo data or a sample button. Offline fixtures remain available through the API and CLI for tests.
 
 ### Develop from source
 
@@ -99,9 +102,9 @@ Blocked and skipped opportunities remain visible below usable results. An older 
 
 ## Your inputs and the output
 
-Provide the objective first. Optional fields include target and adjacent roles, locations, work modes, industries, seniority, minimum annual pay and currency, employment types, relocation, must-haves, and exclusions. Enter authorization, sponsorship needs, or clearance only when you want those facts used.
+Start with a résumé, pasted text, target roles, or a description. No objective is required when you supply a résumé. Add locations, work modes, seniority, minimum annual pay and currency. **Inputs** also provides industries, employment types, relocation, must-haves, and exclusions. Enter authorization, sponsorship needs, or clearance only when you want those facts used.
 
-Paste résumé text or upload up to four TXT, Markdown, PDF, DOCX, or CSV documents: 8 MB each and 60,000 extracted characters total across pasted text and documents. Scanned PDFs need OCR before upload. The profile stage reads all accepted material; each opportunity receives bounded relevant original excerpts plus the cached brief. Missing résumé evidence remains a question, never a fabricated qualification.
+The first screen accepts one PDF, DOCX, TXT, or Markdown résumé. Add supporting documents under **Inputs**, up to four documents total. Each file is limited to 8 MB, with 60,000 extracted characters total across pasted text and documents. Supporting uploads also accept CSV. Scanned PDFs need OCR before upload. The profile stage reads all accepted material; each opportunity receives relevant original excerpts plus the cached brief. Missing résumé evidence remains a question, never a fabricated qualification.
 
 Each CSV row represents a specific opportunity. XLSX adds a separate source-excerpt sheet.
 
@@ -156,7 +159,7 @@ uv run --project app --no-dev python app/run.py search create \
   --salary-min 100000 --provider codex --target 25 --max-calls 80 --json
 
 # Use the returned search ID.
-uv run --project app --no-dev python app/run.py run SEARCH_ID --stage pipeline
+uv run --project app --no-dev python app/run.py run SEARCH_ID --stage report
 uv run --project app --no-dev python app/run.py opportunities SEARCH_ID --min-fit 70
 uv run --project app --no-dev python app/run.py export SEARCH_ID \
   --format xlsx --scope all --output exports/job-research.xlsx
@@ -190,7 +193,7 @@ uv run --project app --no-dev python app/run.py schema search --json
 | `suppress add --email ...` or `--domain ...` | Exclude a mailbox or employer |
 | `export ID --scope all/apply/outreach/shortlist --output FILE` | CSV/XLSX handoff |
 | `backup --output FILE` | Consistent SQLite backup |
-| `demo --run --json` | Complete offline fictional example |
+| `demo --run --json` | Offline fictional fixture for tests; absent from the production UI |
 
 Application outcomes need a job ID or URL when several jobs share an email address. A mailbox match cannot mark several unrelated jobs as applied. Cross-search history guards against repeated outreach.
 
@@ -209,18 +212,6 @@ uv run --project app python -m pytest -c app/pyproject.toml tests
 uv run --project app python scripts/launcher/test_packaging.py
 ```
 
-For repeatable GUI checks, start the app with an isolated `JOB_FINDER_DATA` directory, then run `uv run --project app python scripts/smoke_gui.py --url http://127.0.0.1:PORT`. The check creates fictional searches and verifies reports, downloads, job links, tracking, and responsive layouts. See [GUI evidence](docs/GUI_QA.md).
+Run `uv run --project app python scripts/smoke_gui.py` for GUI checks in an automatically created temporary workspace. Use `--url http://127.0.0.1:PORT` only with an existing isolated test workspace. Add `--run-agent` to make one real profile call with the synthetic résumé; this uses your provider account. The default check makes no model calls. See [GUI evidence](docs/GUI_QA.md).
 
-Tests cover real SQLite/API/CLI flows, ranking, model routes, resumability, call/cost budgets, subprocess contracts, direct-source parsers, source-fetch restrictions, document imports, and exports. Browser smoke checks use the actual GUI with fictional data. Live authenticated model relevance and drafting quality have not been benchmarked with a real résumé in this build. Run a small live search and review its evidence before scaling.
-
-## Useful next additions
-
-The first iteration already includes the practical essentials: freshness checks, explicit eligibility, deduplication, evidence, application links, reviewed outreach, and a feedback trail. The next improvements should follow actual search results:
-
-- **Recurring discovery and change alerts:** identify newly posted roles and closing dates without reprocessing unchanged records.
-- **Warm introductions:** let the user import contacts/referral paths and prioritize authentic connections without pretending a relationship exists.
-- **Reviewed résumé variants:** propose role-specific edits with a visible diff and exact original evidence for every claim.
-- **Outcome-based calibration:** use your own replies, interviews, and rejected-fit reasons to adjust weights and search vocabulary.
-- **Email/ATS integrations:** reconcile external activity to stop unnecessary follow-ups and reduce manual tracking.
-
-No amount of additional discovery replaces reviewing the actual role, submitting a relevant application, and following through on conversations. This app makes that work easier to prioritize and prepare.
+Tests cover SQLite/API/CLI flows, ranking, model routes, resumability, budgets, subprocess contracts, source restrictions, atomic résumé intake, and exports. A live Codex profile and one-job report completed with CSV and Excel exports. This verifies the provider path, not recommendation quality across real résumés. Review a small report before you increase its limits.

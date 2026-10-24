@@ -934,6 +934,72 @@ def test_report_uses_shared_stages_and_omits_outreach(tmp_path, monkeypatch):
     assert any(row["drafts"] for row in service.search_detail(search["id"])["opportunities"])
 
 
+@pytest.mark.parametrize("direct_board", [False, True])
+@pytest.mark.parametrize("legacy_search", [False, True])
+def test_changed_targets_discover_new_jobs_and_preserve_tracked_history(
+    make_service, install_runner, monkeypatch, direct_board, legacy_search
+):
+    service, search = make_service(
+        opportunities=0,
+        settings={
+            "target_results": 1,
+            "ats_boards": ["https://jobs.lever.co/example"] if direct_board else [],
+        },
+    )
+    monkeypatch.setattr(pipeline, "fetch_public_text", lambda *args, **kwargs: "Apply now")
+    monkeypatch.setattr(pipeline, "email_dns_status", lambda email: "missing")
+    discoveries = []
+
+    def discovery():
+        current = service.store.get("searches", search["id"])
+        role = current["preferences"]["roles"][0]
+        discoveries.append((role, current["preferences"]["locations"]))
+        company_url = f"https://company{len(discoveries)}.example.com"
+        return OpportunitySeed(
+            company=f"Company {len(discoveries)}",
+            company_url=company_url,
+            title=role,
+            location="; ".join(current["preferences"]["locations"]),
+            listing_url=company_url + "/jobs/engineer",
+            source_urls=[company_url + "/jobs/engineer"],
+        ).model_dump()
+
+    def complete(record, cancel):
+        if record["schema"] == "ProfileBrief":
+            return AgentResult(profile_payload(), cost_usd=0.1)
+        if record["schema"] == "DiscoveryResult":
+            return AgentResult({"opportunities": [discovery()], "coverage_notes": "Sourced role"}, cost_usd=0.1)
+        return research_data(service, record)
+
+    install_runner(complete)
+    monkeypatch.setattr(
+        pipeline.sources,
+        "fetch_board",
+        lambda *args, **kwargs: {"opportunities": [discovery()], "warnings": [], "complete": True},
+    )
+    manager = Jobs(service)
+    assert manager.create(search["id"], "report", background=False)["status"] == "completed"
+    old = service.store.list("opportunities", search["id"])[0]
+    service.update_opportunity(old["id"], {"application_status": "applied", "review_notes": "Sent portfolio"})
+    if legacy_search:
+        saved = service.store.get("searches", search["id"])
+        saved.pop("discovery_fingerprint")
+        saved.pop("discovery_previous_ids")
+        service.store.save("searches", saved)
+    service.update_search(search["id"], {"preferences": {"roles": ["Process Engineer"], "locations": ["Denver, CO"]}})
+
+    assert manager.create(search["id"], "report", background=False)["status"] == "completed"
+    rows = service.store.list("opportunities", search["id"])
+    assert discoveries == [("Manufacturing Engineer", []), ("Process Engineer", ["Denver, CO"])]
+    assert len(rows) == 2
+    assert any(row["title"] == "Process Engineer" and row["location"] == "Denver, CO" for row in rows)
+    tracked = service.store.get("opportunities", old["id"])
+    assert tracked["application_status"] == "applied" and tracked["review_notes"] == "Sent portfolio"
+
+    assert manager.create(search["id"], "report", background=False)["status"] == "completed"
+    assert len(discoveries) == 2 and len(service.store.list("opportunities", search["id"])) == 2
+
+
 def test_report_preflight_does_not_require_outreach_provider(tmp_path, monkeypatch):
     monkeypatch.setattr(pipeline, "inspect_providers", lambda: [{"id": "codex", "available": True}])
     service = Service(tmp_path)

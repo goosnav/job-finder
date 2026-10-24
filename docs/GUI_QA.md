@@ -1,51 +1,56 @@
 # GUI validation
 
-The screenshots in [`screenshots/`](screenshots/) were captured from the running Python application using its actual API, SQLite workspace, and fictional demo pipeline. No API response mocks or static data substitutions were used for the screenshots.
+The browser smoke check uses the running app, local API, and SQLite workspace. Its inputs contain fictional candidate and employer details.
 
-## Environment
+## Run the check
 
-- Linux source application, launched through `job_finder.api.create_app` on loopback.
-- Playwright with Chromium headless shell 134.0.6998.35.
-- Desktop: 1440 × 1050 and 1440 × 1150.
-- Mobile viewport: 390 × 844.
-- Isolated temporary workspaces containing fictional résumés, companies, and contact information.
+```sh
+uv run --project app python scripts/smoke_gui.py
+```
 
-## Verified through the interface
+The script starts a temporary loopback server and removes its test workspace afterward. The default check makes no model calls. Screenshots go to `dev/qa/`.
 
-| Workflow | Observed result |
+Use an existing isolated server with `--url http://127.0.0.1:PORT`. This mode writes test searches to that server's workspace.
+
+Add `--run-agent` to make one real profile call with the synthetic résumé. This requires a signed-in provider and uses its account limits.
+
+## Current checks
+
+| Workflow | Check |
 | --- | --- |
-| Create a search | Objective, name, and preferences persisted through the API. |
-| Paste a résumé | Candidate text, name, and reply email saved and returned in the search. |
-| Choose task models | An explicit Claude research route and free-text model persisted independently of the Codex default. |
-| Enter multiple locations | Semicolon-separated places preserve commas within city/state names. `Los Angeles, CA; San Diego, CA` becomes two locations. |
-| Run the full demo | Five fictional opportunities, including a distinct company lead, completed the five-stage pipeline. Three opportunities received three-email sequences. |
-| Inspect fit | Ranking, seven component explanations, confidence, gaps, requirements, source references, and résumé quotes were visible in the review drawer. |
-| Review outreach | All three messages opened, subject edits saved, approval persisted, and public email status stayed visible. |
-| Track progress | Shortlist status, a follow-up date, and review notes persisted. |
-| Filter opportunities | Company-lead filtering returned the one company lead; text search returned the matching employer. |
-| Export research | A CSV downloaded through the browser with job-search and email-sequence columns. |
-| Upload a document | A TXT résumé uploaded, appeared in the search, and could be removed through the interface. |
-| Import opportunities | A CSV row created an opportunity with its original role and source links. |
-| Import verification | A dated verifier result updated the matched email to `verified`, with the source retained. |
-| Import application progress | Matching by listing URL updated the opportunity to `interview` and retained its follow-up date. |
-| Mobile layout | Main page and drawer had no horizontal overflow at 390 pixels. |
-| Mobile email editing | Draft textareas resized to show all content; measured client height equaled scroll height for all three messages. |
-| Feedback inside dialogs | Save and approval notifications rendered inside the modal's top layer and could be dismissed. |
+| Production startup | A saved demo selection does not reopen; no sample button or demo search appears in the picker. |
+| Résumé intake | A TXT résumé alone creates a search and retains location, salary, and work arrangement. |
+| Goals-only intake | Roles and a description create a search without a résumé. |
+| Invalid résumé | A malformed PDF shows an error, retains the inputs, and creates no partial search. |
+| Repeated submission | A slow intake accepts one request and creates one search; both buttons disable until it finishes and recover after an invalid upload. |
+| Supporting documents | A mixed upload shows the accepted document and the failed file; removal persists. |
+| Search plan | With `--run-agent`, a real profile produces suggested roles and shows the saved constraints. |
+| Job review | Imported jobs open in the drawer; notes persist. |
+| Shortlist | Saved jobs appear in Shortlist; CSV contains only the saved job. |
+| Job access | The job link opens its application URL in a new tab. The test intercepts its fictional destination. |
+| Exports | CSV retains job links and notes; Excel contains Report, Opportunities, Sources, and Read me sheets. |
+| Keyboard | A checkbox retains focus after selection; Tab continues through the interface. |
+| Layout | Intake and results have no page overflow at 320, 390, 768, and desktop widths. |
+| Reopen | A reload restores saved jobs. |
 
-The successful browser checks recorded **zero uncaught JavaScript errors and zero failed HTTP responses**. `node --check app/static/app.js` passed after the final edits.
+The script also fails on uncaught JavaScript errors and unexpected HTTP errors. Expected résumé validation failures are allowed.
+
+## Verification status
+
+The full production browser check passed, including the duplicate-submission regression. An independent repeat of the main workflow also passed.
+
+A live browser plan check also passed with the synthetic résumé. A real Codex profile completed in one call. A separate one-job report completed in two calls and produced CSV and Excel exports. These checks verify the provider path; they do not measure recommendation quality across real résumés.
 
 ## Screenshots
 
-- [`opportunities.png`](screenshots/opportunities.png): ranked opportunities with distinct role listings and company leads.
-- [`opportunity-review.png`](screenshots/opportunity-review.png): fit components and supporting résumé evidence.
-- [`outreach.png`](screenshots/outreach.png): three-message editor and approval controls.
-- [`evidence.png`](screenshots/evidence.png): source dates, listing status, and research excerpts.
-- [`search.png`](screenshots/search.png): objective and résumé setup.
-- [`agent-routes.png`](screenshots/agent-routes.png): independent provider and model controls for each task.
-- [`progress.png`](screenshots/progress.png): actual demo progress while the run was active.
-- [`mobile.png`](screenshots/mobile.png): compact opportunity list at 390 pixels.
-- [`mobile-outreach.png`](screenshots/mobile-outreach.png): mobile review drawer.
+- [`intake.png`](screenshots/intake.png): résumé, targets, location, salary, work arrangement, and provider.
+- [`search-plan.png`](screenshots/search-plan.png): suggested roles and candidate assessment.
+- [`opportunities.png`](screenshots/opportunities.png): jobs and direct listing actions.
+- [`opportunity-review.png`](screenshots/opportunity-review.png): job review drawer.
+- [`search.png`](screenshots/search.png): saved inputs and document controls.
+- [`agent-routes.png`](screenshots/agent-routes.png): task provider and model controls.
+- [`mobile.png`](screenshots/mobile.png): results at 390 pixels.
 
-## Limits of this validation
+## Limits
 
-This validates the source GUI and actual local API workflows. The fictional demo does not exercise live internet discovery or authenticated model calls. Provider selection was verified as persisted configuration; successful Codex or Claude sign-in is a separate runtime requirement. No email or application was sent. Headless viewport checks do not constitute native macOS, Windows, or Linux desktop acceptance; packaging validation is recorded separately.
+The default browser check imports fictional jobs; it does not test live discovery or outreach quality. No messages or applications are sent. Headless browser checks do not establish native acceptance of macOS, Windows, or Linux launchers. M1a remains ACTIVE until the full native matrix passes.

@@ -29,6 +29,10 @@ inferences. Preserve actual qualifications and dates; don't inflate seniority.
 Do not include candidate name, email, phone, street address, exact private employer
 accomplishments or confidential document text in search_terms. Suggested roles are
 hypotheses for the person to review, not a guarantee of fit. No web access.
+Prioritize roles the candidate can credibly pursue now, then plausible adjacent
+roles. Respect stated location, work mode, salary, seniority and exclusions.
+Use the summary to explain the recommended direction. Put tradeoffs, missing
+salary evidence and material requirements to confirm in gaps or unknowns.
 """ + data({"objective": search["objective"], "candidate": search["candidate"], "preferences": search["preferences"], "documents": [{"name": d["name"], "text": d["text"]} for d in documents]})
 
 

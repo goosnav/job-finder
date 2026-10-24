@@ -104,6 +104,12 @@ def create_app(service: Service | None = None, *, on_quit=None, testing: bool = 
     def new_search(body: SearchInput):
         return service.create_search(body.model_dump())
 
+    @app.post("/api/searches/intake")
+    async def intake(payload: Annotated[str, Form()], file: Annotated[UploadFile | None, File()] = None):
+        document = await uploaded(file) if file else None
+        body = SearchInput.model_validate_json(payload)
+        return await run_in_threadpool(service.create_search, body.model_dump(), document=document)
+
     @app.post("/api/demo")
     def new_demo():
         search = service.create_demo()
