@@ -103,6 +103,7 @@ class Weights(Model):
 
 class Settings(Model):
     provider: Literal["codex", "claude", "demo"] = "codex"
+    agent_tools_approved: bool = False
     model: str = Field(default="", max_length=120)
     routes: ModelRoutes = Field(default_factory=ModelRoutes)
     target_results: int = Field(default=25, ge=1, le=1000)

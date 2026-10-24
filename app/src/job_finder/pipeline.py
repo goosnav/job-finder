@@ -33,7 +33,7 @@ from .models import (
     route_for,
     strict_schema,
 )
-from .providers import AgentResult, AgentRunner, ProviderError, inspect_providers
+from .providers import AgentResult, AgentRunner, ProviderError, recovery_for
 from .quality import sequence_issues
 from .ranking import assess, candidate_claims_supported, deadline_passed
 from .research import (
@@ -416,6 +416,7 @@ class Context:
                         ),
                         max_turns=self.settings["max_turns"],
                         max_cost_usd=reservation or 1.0,
+                        allow_tools=self.settings.get("agent_tools_approved", False),
                     )
                     result = runner.run(prompt, strict_schema(model), web=web, cancel=self.stop)
                 # Save a finished result even if Pause arrived immediately afterward.
@@ -432,14 +433,19 @@ class Context:
                         "AGENT-SCHEMA", "Agent returned invalid structured data after one retry."
                     ) from exc
             except ProviderError as exc:
+                failure = {"error_code": exc.code, "error_provider": provider, "recovery": recovery_for(provider, exc.code)}
+                self.mutate(lambda job, failure=failure: job.update(failure))
                 if exc.code in {
                     "not_installed",
+                    "node_missing",
+                    "launch_permission_denied",
                     "unsupported_cli",
                     "native_executable_required",
                     "launch_failed",
                     "unsupported_provider",
                     "invalid_limits",
                     "input_limit",
+                    "consent_required",
                 }:
                     uncertain = False
                 if self.stop.is_set() or exc.code == "cancelled":
@@ -448,6 +454,9 @@ class Context:
                     raise Stopped() from exc
                 if exc.code in {
                     "auth_required",
+                    "model_unavailable",
+                    "node_missing",
+                    "launch_permission_denied",
                     "not_installed",
                     "unsupported_cli",
                     "native_executable_required",
@@ -456,6 +465,8 @@ class Context:
                     "unsupported_provider",
                     "invalid_limits",
                     "input_limit",
+                    "consent_required",
+                    "permission_denied",
                 }:
                     self.halt("failed", exc.message)
                     raise Stopped() from exc
@@ -551,14 +562,11 @@ class Jobs:
         required = {route_for(search["settings"], task)["provider"] for task in tasks} - {"demo"}
         if not required:
             return
-        providers = {p["id"]: p for p in inspect_providers()}
-        for name in sorted(required):
-            provider = providers.get(name)
-            if not provider or not provider.get("available"):
-                raise AppError(
-                    "PROVIDER-SETUP",
-                    (provider or {}).get("message") or f"Set up {name} before this stage.",
-                )
+        if not search["settings"].get("agent_tools_approved", False):
+            raise AppError(
+                "AGENT-CONSENT",
+                "Approve agent tool access before running. Agents can use the internet, run commands and change files under your account.",
+            )
 
     def create(self, search_id: str, stage: str = "pipeline", *, background: bool = True) -> dict:
         RunRequest(stage=stage)
@@ -679,7 +687,7 @@ class Jobs:
                 current.update(
                     status="queued",
                     requested_action="",
-                    error="",
+                    error="", error_code="", error_provider="", recovery=None,
                     max_agent_calls=search["settings"]["max_agent_calls"],
                     worker_pid=os.getpid(),
                     worker_token=None,

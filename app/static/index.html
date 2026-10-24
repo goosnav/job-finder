@@ -24,14 +24,17 @@
       <div class="topbar-right">
         <span id="request-status" class="request-status" role="status"></span>
         <button type="button" class="icon-button help-button" data-action="help" aria-label="Setup & help" title="Setup & help">?</button>
+        <button type="button" class="button quit-button" data-action="quit" aria-label="Quit Job Finder" title="Quit Job Finder"><svg viewBox="0 0 20 20" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M10 2v8M5.5 4.5a7 7 0 1 0 9 0"/></svg><span>Quit</span></button>
       </div>
     </header>
     <div id="job-region" class="job-region" aria-live="polite" aria-atomic="false"></div>
+    <div id="provider-recovery" class="provider-recovery" hidden></div>
     <main id="main" tabindex="-1"><div class="loading-view" role="status">Open Job Finder…</div></main>
   </div>
   <dialog id="campaign-dialog" class="dialog campaign-dialog" aria-labelledby="campaign-dialog-title"></dialog>
   <dialog id="lead-dialog" class="dialog lead-dialog" aria-labelledby="lead-dialog-title"></dialog>
   <dialog id="small-dialog" class="dialog small-dialog" aria-labelledby="small-dialog-title"></dialog>
+  <dialog id="agent-consent-dialog" class="dialog" aria-labelledby="agent-consent-title"><form method="dialog"><div class="dialog-body"><h2 id="agent-consent-title">Allow agent tools</h2><p>Your agent can use the internet, run commands, read or change files, and use connected tools under your account. Instructions in documents or web pages can influence its actions.</p><p>This approval is saved for this search.</p></div><div class="dialog-footer"><button class="button" value="cancel">Cancel</button><button class="button accent" value="allow">Allow & run</button></div></form></dialog>
   <input id="import-input" type="file" accept=".csv,.xlsx" hidden>
   <input id="documents-input" type="file" accept=".txt,.md,.pdf,.docx,.csv" multiple hidden>
   <input id="suppression-input" type="file" accept=".csv" hidden>

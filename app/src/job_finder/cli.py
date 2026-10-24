@@ -261,6 +261,7 @@ def watch(manager: Jobs, run_id: str, json_output: bool):
 @guarded
 def run(
     search_id: str, stage: str = "pipeline",
+    allow_agent_tools: Annotated[bool, typer.Option(help="Approve agent commands, file changes, connected tools and internet access for this search.")] = False,
     profile_provider: str | None = None, profile_model: str | None = None,
     discovery_provider: str | None = None, discovery_model: str | None = None,
     research_provider: str | None = None, research_model: str | None = None,
@@ -271,6 +272,8 @@ def run(
     service = Service()
     manager = Jobs(service)
     manager.recover_interrupted()
+    if allow_agent_tools:
+        service.update_search(search_id, {"settings": {"agent_tools_approved": True}})
     overrides = route_overrides(locals())
     if overrides:
         current = service.store.get("searches", search_id)["settings"]["routes"]

@@ -7,7 +7,8 @@ Fetch `GET /api/session` from the same origin. Keep its token in memory and send
 | Method | Path | Operation |
 |---|---|---|
 | GET | `/health/ready` | Readiness, app identity and version |
-| GET | `/api/session` | Session token, local paths, CLI capability status |
+| GET | `/api/session` | Session token, local paths, installed agents; `?refresh=true` repeats detection |
+| POST | `/api/providers/{provider}/login` | Open Codex or Claude's fixed CLI sign-in command in a native terminal |
 | GET/POST | `/api/searches` | List/create searches; GET returns `{searches}` |
 | POST | `/api/searches/intake` | Multipart `payload` JSON plus optional résumé `file`; atomically create search and document |
 | GET/PATCH | `/api/searches/{id}` | Search, ranked opportunities, runs, counts, résumé documents |
@@ -48,8 +49,20 @@ target roles, or a description. `objective` defaults to an empty string.
 Settings include `provider`, `model`, `routes`, `target_results`, `min_fit`,
 `discovery_queries`, `max_agent_calls`, `max_minutes`, `concurrency`,
 `agent_timeout_seconds`, `max_turns`, `max_cost_usd`, `research_pages`, `weights`,
-and `ats_boards`. The OpenAPI schema gives exact enums and bounds. The CLI also
+`ats_boards`, and `agent_tools_approved`. The OpenAPI schema gives exact enums and bounds. The CLI also
 prints the full configuration schema with `job-finder schema search --json`.
+
+`agent_tools_approved` defaults to `false` and persists per search. Live agent
+stages require approval; otherwise they return `AGENT-CONSENT`. The GUI saves
+approval after **Allow & run**. API clients must obtain equivalent consent
+before they PATCH `{"settings":{"agent_tools_approved":true}}`. The CLI's
+`run --allow-agent-tools` saves that approval. Set it to `false` to revoke future
+tasks; active runs must pause before search settings can change.
+
+Approved agents inherit the user's CLI configuration and receive full tool
+permissions. They can run commands, read or change files, use the internet,
+and access connected tools. Document and webpage instructions can influence
+their actions. The adapter does not bypass separate CLI hook-trust decisions.
 
 Each route in `routes.profile`, `routes.discovery`, `routes.research`, and
 `routes.outreach` accepts a `provider` (`inherit`, `codex`, or `claude`) and a
@@ -64,6 +77,7 @@ are passed to the installed provider CLI rather than frozen into an app dropdown
   "preferences": {"roles": ["Manufacturing Engineer"], "locations": ["Dayton, OH"]},
   "settings": {
     "provider": "codex",
+    "agent_tools_approved": false,
     "target_results": 25,
     "routes": {"outreach": {"provider": "claude", "model": ""}}
   }
@@ -82,6 +96,19 @@ The GUI's **Build search plan** starts `profile` through the same run endpoint.
 `unknowns`, and `search_terms`. **Find jobs** starts `report` and reuses a valid
 profile. These are shared service stages, not separate GUI-only workflows.
 
+## Agent detection and sign-in
+
+Detection finds standard native and npm installations, including common install
+locations absent from the launcher's PATH. npm entrypoints use their Node.js
+runtime directly. Installation and version results are advisory; the actual task
+checks existing authentication and tool access. `available` does not prove sign-in.
+
+`POST /api/providers/{provider}/login` accepts only `codex` or `claude`. It runs
+the fixed `codex login` or `claude auth login` command in a native console.
+The endpoint requires the session token and same-origin checks. It accepts no
+arbitrary command and returns a message directing the user to retry the task.
+If the console cannot open, recovery supplies the terminal command.
+
 ## Results, review, and tracking
 
 `GET /api/searches/{id}` returns `search`, `opportunities`, `runs`, `counts`,
@@ -96,8 +123,9 @@ Opportunity PATCH accepts review `status`, `review_notes`, edited `drafts`,
 public contact fields, verification fields, `application_status`, `activity_at`,
 and `next_follow_up`. Application status is one of `new`, `shortlisted`,
 `applied`, `contacted`, `replied`, `interview`, `offer`, `rejected`, `withdrawn`,
-`not_interested`, or `bounced`. Timestamps use ISO dates/times. Approval is a
-local review action; the app does not send mail or apply on the user's behalf.
+`not_interested`, or `bounced`. Timestamps use ISO dates/times. Outreach approval
+updates a local review record. The app exposes no Send or Apply workflow;
+approved agent tools can take external actions through configured connections.
 
 Opportunity CSV imports require a company and a source appropriate to the row:
 specific roles need a title and listing/application URL; company leads need a
@@ -130,7 +158,12 @@ provider CLI does not expose pricing; call, time, turn, page, and concurrency
 limits still bound work. The UI/CLI presents these limits separately.
 
 Errors use `{"error":{"code":"STABLE-CODE","message":"Actionable message"}}`.
+Provider errors add `provider` and `recovery`. Failed runs retain `error_code`,
+`error_provider`, and `recovery`, including its `title`, `steps`, and optional
+`command`/`url`. These fields let the GUI offer sign-in, refreshed detection,
+and retry without losing the saved search. `model_unavailable` offers **Choose
+model** to open Agent settings. Permission failures remain distinct from sign-in
+failures. A successful profile retry opens Plan; report retry opens Jobs.
 Errors omit submitted résumé text, raw provider stderr, tokens, and credentials.
 Uploads are bounded at 8 MB; extracted résumé text and document counts also have
-limits. No endpoint sends messages, submits applications, or exports stored
-provider credentials.
+limits. Endpoints do not export stored provider credentials.

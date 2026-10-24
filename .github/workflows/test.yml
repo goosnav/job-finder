@@ -31,3 +31,5 @@ jobs:
         run: uv run --project app playwright install --with-deps chromium
       - if: runner.os == 'Linux'
         run: uv run --project app python scripts/smoke_gui.py
+      - if: runner.os == 'Linux'
+        run: uv run --project app python scripts/smoke_agent_recovery.py

@@ -27,6 +27,8 @@ The script preview includes compiled supervisors for macOS, Windows, and Linux o
 3. Review **Plan** for suggested roles, strengths, gaps, and facts to confirm. Choose **Find jobs** to generate the report.
 4. Open **Jobs** to compare fit, open listings, save a shortlist, and track progress. Choose **CSV** or **Excel** to download.
 
+Before the first agent task, review **Allow agent tools** and choose **Allow & run**. Approval is saved for that search; **Inputs → Agent settings** lets you revoke it. The agent can run commands, read or change files, use the internet, and use connected tools under your account. Instructions in documents or web pages can influence those actions. The app inherits your CLI configuration and uses full tool permissions after approval.
+
 Excel opens with a **Report** sheet containing the search brief and clickable job links. Detailed records and source excerpts occupy separate sheets. Use **Inputs** to change your search; relevant edits clear the old plan and analysis. The next report uses your changed targets and preserves tracked job history.
 
 Use **Outreach** to prepare introductions after a report. The app opens your searches without demo data or a sample button. Offline fixtures remain available through the API and CLI for tests.
@@ -47,13 +49,13 @@ GOTOOLCHAIN=go1.27.3 python3 scripts/build_release.py --script-package
 
 This prepares the bundled supervisors for all root launch scripts. The Windows opener also works without this build step. Mac and Linux source checkouts need the build or the packaged ZIP. For later application-only updates, use `--script-package --reuse-images`.
 
-For live work, install and sign in to [Codex](https://developers.openai.com/codex/cli/) or [Claude Code](https://code.claude.com/docs/en/overview). Job Finder uses that CLI's authentication and checks its required capabilities. It does not store API keys. Your chosen provider receives the candidate material needed for its task; local storage does not mean offline AI processing.
+For live work, install [Codex](https://developers.openai.com/codex/cli/) or [Claude Code](https://code.claude.com/docs/en/overview). Job Finder finds standard native and npm installations, including common locations missing from a desktop launcher's PATH. It uses your existing CLI sign-in. Installation and version checks are advisory; the actual task checks authentication and access. Your chosen provider receives the candidate material needed for its task.
 
 ```sh
 uv run --project app --no-dev python app/run.py doctor --json
 ```
 
-An unsupported CLI version produces a setup instruction. A desktop launcher can use `JOB_FINDER_CODEX_BIN` or `JOB_FINDER_CLAUDE_BIN` to locate a native executable outside PATH. On Windows, point to the underlying `.exe`, not a `.cmd`/`.bat` wrapper. Provider subscriptions, usage limits, and charges are separate.
+If a task fails, use its recovery panel: sign in when requested, choose **Check again** after an installation change, then **Retry task**. Saved inputs and results remain available. **Setup & help** can also open the CLI's sign-in window. Optional developer overrides `JOB_FINDER_CODEX_BIN` and `JOB_FINDER_CLAUDE_BIN` select a custom installation; standard installations need no override. Provider subscriptions, usage limits, and charges are separate.
 
 ### Native app
 
@@ -72,7 +74,7 @@ GitHub **Actions → Build native ZIP → Run workflow** creates a downloadable 
 5. **Draft.** Give each suitable opportunity a separate writing call using its saved dossier. Produce one initial inquiry and two distinct follow-ups without repeating the web research for each message.
 6. **Review and act.** Inspect the fit breakdown and unresolved conditions, edit the three emails, approve outreach, open application links, and track progress. Export the full research, an application list, an outreach list, or a shortlist.
 
-The app prepares work. It does not submit applications, send messages, sign into job sites, or change your résumé automatically.
+The app has no Send or Apply workflow. Approved agent tools can change files and take external actions through your configured connections.
 
 ### Open roles and company leads
 
@@ -161,7 +163,7 @@ uv run --project app --no-dev python app/run.py search create \
   --salary-min 100000 --provider codex --target 25 --max-calls 80 --json
 
 # Use the returned search ID.
-uv run --project app --no-dev python app/run.py run SEARCH_ID --stage report
+uv run --project app --no-dev python app/run.py run SEARCH_ID --stage report --allow-agent-tools
 uv run --project app --no-dev python app/run.py opportunities SEARCH_ID --min-fit 70
 uv run --project app --no-dev python app/run.py export SEARCH_ID \
   --format xlsx --scope all --output exports/job-research.xlsx
@@ -170,6 +172,8 @@ uv run --project app --no-dev python app/run.py export SEARCH_ID \
 uv run --project app --no-dev python app/run.py run SEARCH_ID \
   --stage draft --outreach-provider claude
 ```
+
+`--allow-agent-tools` grants and saves the same per-search approval as **Allow & run**. Review the tool-access notice above before you use it. Later runs reuse the saved approval.
 
 Use `--profile-model`, `--discovery-model`, `--research-model`, and `--outreach-model` with model IDs supported by your selected CLI/account. Equivalent provider flags accept `codex`, `claude`, or `inherit` at the task level. Advanced settings, including weights and all constraints, can come from [search-settings.json](examples/search-settings.json):
 
@@ -205,7 +209,7 @@ Exit codes: `0` complete; `2` invalid input/setup; `3` failed run; `4` exhausted
 
 SQLite data lives in your OS's `JobFinder` application-data directory, separate from Auto Outbound. `--data-dir` or `JOB_FINDER_DATA` chooses another workspace. The app has no telemetry or hosted account. Uploaded text, research, and exports can contain personal information; keep backups private. [Security and data behavior](docs/SECURITY.md).
 
-Python/FastAPI, SQLite, and static HTML/CSS/JavaScript form the app. No frontend build or runtime CDN is needed. Provider processes run with restricted tools in isolated temporary directories. Local mutations require a per-launch token and same-origin checks. Fetching rejects nonpublic addresses and unsafe redirects; document sizes and spreadsheet cells are bounded. [Architecture](docs/ARCHITECTURE.md) · [HTTP API](docs/API.md).
+Python/FastAPI, SQLite, and static HTML/CSS/JavaScript form the app. No frontend build or runtime CDN is needed. Approved provider processes inherit your CLI configuration and run with full tool permissions. Local mutations require a per-launch token and same-origin checks. The app's source fetcher rejects nonpublic addresses and unsafe redirects; document sizes and spreadsheet cells are bounded. [Architecture](docs/ARCHITECTURE.md) · [HTTP API](docs/API.md).
 
 ```sh
 uv sync --project app --locked
@@ -216,4 +220,6 @@ uv run --project app python scripts/launcher/test_packaging.py
 
 Run `uv run --project app python scripts/smoke_gui.py` for GUI checks in an automatically created temporary workspace. Use `--url http://127.0.0.1:PORT` only with an existing isolated test workspace. Add `--run-agent` to make one real profile call with the synthetic résumé; this uses your provider account. The default check makes no model calls. See [GUI evidence](docs/GUI_QA.md).
 
-Tests cover SQLite/API/CLI flows, ranking, model routes, resumability, budgets, subprocess contracts, source restrictions, atomic résumé intake, and exports. A live Codex profile and one-job report completed with CSV and Excel exports. This verifies the provider path, not recommendation quality across real résumés. Review a small report before you increase its limits.
+Run `uv run --project app python scripts/smoke_agent_recovery.py` on macOS or Linux to check consent, both provider adapters, recovery, retry, and Quit with local CLI fixtures. It makes no live calls.
+
+Tests cover SQLite/API/CLI flows, ranking, model routes, resumability, budgets, subprocess contracts, source restrictions, atomic résumé intake, and exports. A live Claude web task passed with existing sign-in. Current Codex attempts reached the provider but returned `model_unavailable` for this account. Choose an available model or another installed agent. Review a small report before you increase its limits.

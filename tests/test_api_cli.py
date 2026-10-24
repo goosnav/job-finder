@@ -27,6 +27,57 @@ def test_actual_ui_assets_and_health_are_served(client):
     assert client.get("/api/openapi.json").json()["info"]["title"] == "Job Finder"
 
 
+def test_provider_refresh_and_login_are_fixed_authenticated_actions(client, monkeypatch):
+    from job_finder import api
+
+    checks, logins = [], []
+    monkeypatch.setattr(api, "inspect_providers", lambda: checks.append(True) or [{"id": "codex", "available": True}])
+    monkeypatch.setattr(api, "open_provider_login", lambda provider: logins.append(provider))
+    token = headers(client)
+    count = len(checks)
+    client.get("/api/session")
+    assert len(checks) == count
+    client.get("/api/session?refresh=true")
+    assert len(checks) == count + 1
+    assert client.post("/api/providers/codex/login").status_code == 403
+    assert client.post("/api/providers/codex;whoami/login", headers=token).status_code == 422
+    assert not logins
+    assert client.post("/api/providers/claude/login", headers=token).status_code == 200
+    assert logins == ["claude"]
+
+
+def test_real_agent_runs_require_explicit_tool_approval(client, monkeypatch):
+    from job_finder import pipeline
+    from job_finder.providers import ProviderError
+
+    calls = []
+
+    class InstalledAgent:
+        def __init__(self, provider, **options):
+            assert options["allow_tools"] is True
+
+        def run(self, *args, **kwargs):
+            calls.append(True)
+            raise ProviderError("permission_denied", "The agent denied this tool request.")
+
+    monkeypatch.setattr(pipeline, "AgentRunner", InstalledAgent)
+    token = headers(client)
+    search = client.post("/api/searches", headers=token, json={"name": "Consent", "objective": "Find jobs"}).json()
+    path = f"/api/searches/{search['id']}"
+    denied = client.post(path + "/runs", headers=token, json={"stage": "profile"})
+    assert denied.status_code == 400 and denied.json()["error"]["code"] == "AGENT-CONSENT"
+    assert not calls and client.get(path).json()["runs"] == []
+    client.patch(path, headers=token, json={"settings": {"agent_tools_approved": True}})
+    job = client.post(path + "/runs", headers=token, json={"stage": "profile"}).json()["run"]
+    for _ in range(100):
+        run = client.get(f"/api/runs/{job['id']}").json()["run"]
+        if run["status"] == "failed":
+            break
+        time.sleep(.02)
+    assert len(calls) == 1 and run["error_code"] == "permission_denied"
+    assert run["error_provider"] == "codex" and run["recovery"]["steps"]
+
+
 def test_mutations_need_session_and_same_origin(client):
     assert client.post("/api/demo").status_code == 403
     assert client.post("/api/demo", headers=headers(client) | {"Origin": "https://attacker.example"}).status_code == 403

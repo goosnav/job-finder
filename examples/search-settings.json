@@ -30,6 +30,7 @@
   },
   "settings": {
     "provider": "codex",
+    "agent_tools_approved": false,
     "model": "",
     "routes": {
       "profile": {

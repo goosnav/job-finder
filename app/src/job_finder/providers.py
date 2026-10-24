@@ -1,6 +1,6 @@
 """Bounded adapters for a user's installed Codex or Claude Code CLI.
 
-The adapter owns process isolation and transport, not the search policy. The
+The adapter owns process lifecycle and transport, not the search policy. The
 application validates returned data with its Pydantic models before saving it.
 No command is executed through a shell and no provider credentials are copied.
 """
@@ -9,11 +9,14 @@ from __future__ import annotations
 
 import json
 import math
+import ntpath
 import os
 import re
+import shlex
 import shutil
 import signal
 import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -39,55 +42,321 @@ class ProviderError(Exception):
         super().__init__(message)
 
 
-_REQUIRED_FLAGS = {
-    "codex": (
-        "--ignore-user-config",
-        "--ephemeral",
-        "--skip-git-repo-check",
-        "--sandbox",
-        "--json",
-        "--config",
-        "--strict-config",
-        "--output-schema",
-        "--output-last-message",
-    ),
-    "claude": (
-        "--safe-mode",
-        "--output-format",
-        "--json-schema",
-        "--tools",
-        "--allowedTools",
-        "--disallowedTools",
-        "--strict-mcp-config",
-        "--mcp-config",
-        "--permission-mode",
-        "--no-session-persistence",
-        "--max-turns",
-        "--max-budget-usd",
-    ),
-}
+_PROVIDERS = ("codex", "claude")
+_NPM_ENTRIES = {"codex": "@openai/codex/bin/codex.js", "claude": "@anthropic-ai/claude-code/cli.js"}
 
 
-def _resolve_executable(provider: str, executable: str | None = None) -> str:
-    if provider not in _REQUIRED_FLAGS:
+def _install_directories() -> list[Path]:
+    home = Path(os.getenv("USERPROFILE") or Path.home())
+    roots = [home / ".local/bin", home / ".npm-global/bin", home / ".volta/bin"]
+    for variable, suffix in (
+        ("APPDATA", "npm"),
+        ("LOCALAPPDATA", "npm"),
+        ("LOCALAPPDATA", "Microsoft/WinGet/Links"),
+        ("LOCALAPPDATA", "Programs/nodejs"),
+        ("LOCALAPPDATA", "Volta/bin"),
+        ("ProgramFiles", "nodejs"),
+        ("ProgramFiles(x86)", "nodejs"),
+        ("NVM_SYMLINK", ""),
+        ("VOLTA_HOME", "bin"),
+    ):
+        if value := os.getenv(variable):
+            roots.append(Path(value) / suffix)
+    roots += [home / "AppData/Roaming/npm", home / "AppData/Local/Microsoft/WinGet/Links"]
+    if sys.platform == "win32":
+        try:
+            import winreg
+        except ImportError:
+            pass
+        else:
+            for hive, key in (
+                (winreg.HKEY_CURRENT_USER, "Environment"),
+                (winreg.HKEY_LOCAL_MACHINE, r"SYSTEM\CurrentControlSet\Control\Session Manager\Environment"),
+            ):
+                try:
+                    with winreg.OpenKey(hive, key) as environment:
+                        value, _ = winreg.QueryValueEx(environment, "Path")
+                    if isinstance(value, str):
+                        roots += [Path(path) for part in ntpath.expandvars(value).split(";") if (path := part.strip().strip('"'))]
+                except OSError:
+                    continue
+    else:
+        roots += [Path("/opt/homebrew/bin"), Path("/usr/local/bin"), Path("/usr/bin")]
+    return list(dict.fromkeys(roots))
+
+
+def _resolve_executable(provider: str, executable: str | None = None) -> list[str]:
+    """Resolve native CLIs or known npm entrypoints without executing a shell shim."""
+    if provider not in _PROVIDERS:
         raise ProviderError("unsupported_provider", "Choose Codex or Claude Code.")
-    candidate = executable or os.getenv(f"JOB_FINDER_{provider.upper()}_BIN") or provider
-    found = shutil.which(candidate)
-    if not found:
-        raise ProviderError(
-            "not_installed",
-            f"Install {provider} and add it to PATH, or set JOB_FINDER_{provider.upper()}_BIN "
-            "to its executable. Then run the provider check again.",
+    override = executable or os.getenv(f"JOB_FINDER_{provider.upper()}_BIN")
+    directories = _install_directories()
+    candidates = [
+        Path(found) for name in (provider, provider + ".exe") if (found := shutil.which(name))
+    ]
+    if override:
+        found = shutil.which(override)
+        candidates = [Path(found)] if found else []
+        directories = [Path(override).parent]
+    else:
+        # Resolve the current PATH entry fully before trying stale-environment fallbacks.
+        for candidate in candidates:
+            try:
+                return _resolve_executable(provider, str(candidate))
+            except ProviderError:
+                continue
+        candidates += [
+            directory / (provider + suffix)
+            for directory in directories
+            for suffix in (".exe", "", ".cmd")
+        ]
+    candidates = [
+        candidate.with_suffix(".exe")
+        for candidate in candidates
+        if candidate.suffix.lower() in {".cmd", ".bat", ".ps1"}
+    ] + candidates
+    package_roots = list(
+        dict.fromkeys([candidate.parent for candidate in candidates] + directories)
+    )
+    entries = []
+    for root in package_roots:
+        for node_modules in (root / "node_modules", root.parent / "lib/node_modules"):
+            entries.append(node_modules / _NPM_ENTRIES[provider])
+            if provider == "codex" and sys.platform == "win32":
+                for arch, triple in (
+                    ("x64", "x86_64-pc-windows-msvc"),
+                    ("arm64", "aarch64-pc-windows-msvc"),
+                ):
+                    candidates += [
+                        node_modules / package / "vendor" / triple / "codex/codex.exe"
+                        for package in ("@openai/codex", f"@openai/codex-win32-{arch}")
+                    ]
+    for candidate in candidates:
+        if candidate.is_file() and candidate.suffix.lower() not in {
+            ".cmd",
+            ".bat",
+            ".ps1",
+            ".js",
+            ".mjs",
+            ".cjs",
+        }:
+            resolved = candidate.resolve()
+            if resolved.suffix.lower() in {".cmd", ".bat", ".ps1"}:
+                continue
+            if sys.platform == "win32" and resolved.suffix.lower() != ".exe":
+                continue
+            if resolved.suffix.lower() not in {".js", ".mjs", ".cjs"}:
+                return [str(resolved)]
+            entries.insert(0, resolved)
+    entries += [
+        candidate.resolve()
+        for candidate in candidates
+        if candidate.is_file() and candidate.suffix.lower() in {".js", ".mjs", ".cjs"}
+    ]
+    for entry in dict.fromkeys(entries):
+        if not entry.is_file() or not entry.as_posix().endswith(_NPM_ENTRIES[provider]):
+            continue
+        nodes = [Path(found) for name in ("node", "node.exe") if (found := shutil.which(name))]
+        nodes += [
+            directory / name
+            for directory in package_roots + _install_directories()
+            for name in ("node.exe", "node")
+        ]
+        node = next(
+            (
+                path.resolve()
+                for path in nodes
+                if path.is_file() and path.resolve().suffix.lower() not in {".cmd", ".bat", ".ps1"}
+                and (sys.platform != "win32" or path.resolve().suffix.lower() == ".exe")
+            ),
+            None,
         )
-    # Windows can implicitly invoke a shell for batch files despite shell=False.
-    # A native CLI executable prevents schema/prompt arguments reaching cmd.exe.
-    if Path(found).suffix.lower() in {".cmd", ".bat"}:
+        if node:
+            return [str(node), str(entry.resolve())]
         raise ProviderError(
-            "native_executable_required",
-            f"Use the native {provider} executable, not its .cmd/.bat wrapper. "
-            f"Set JOB_FINDER_{provider.upper()}_BIN to the .exe file.",
+            "node_missing",
+            "The installed npm CLI needs Node.js. Repair or reinstall Node.js, then retry.",
         )
-    return str(Path(found).resolve())
+    raise ProviderError(
+        "not_installed",
+        f"Could not find an installed {provider} CLI. Install it, then check again.",
+    )
+
+
+def recovery_for(provider: str, code: str) -> dict[str, Any]:
+    if provider not in _PROVIDERS:
+        raise ProviderError("unsupported_provider", "Choose Codex or Claude Code.")
+    login = "codex login" if provider == "codex" else "claude auth login"
+    url = (
+        "https://developers.openai.com/codex/cli/"
+        if provider == "codex"
+        else "https://code.claude.com/docs/en/setup"
+    )
+    recovery = {
+        "not_installed": (
+            "Install your agent",
+            ["Install the CLI on this computer, then check again."],
+            None,
+            url,
+        ),
+        "node_missing": (
+            "Repair Node.js",
+            ["The npm CLI was found, but its Node.js runtime was not. Repair Node.js, then retry."],
+            None,
+            "https://nodejs.org/en/download",
+        ),
+        "launch_failed": (
+            "Repair your agent installation",
+            ["The installed CLI could not start. Repair its installation, then retry."],
+            None,
+            url,
+        ),
+        "login_unavailable": (
+            "Open CLI sign-in",
+            ["Open a terminal, run the sign-in command, then return and retry."],
+            login,
+            None,
+        ),
+        "auth_required": (
+            "Sign in to your agent",
+            ["Open sign-in and complete the CLI login.", "Return here and retry the saved task."],
+            login,
+            None,
+        ),
+        "consent_required": (
+            "Approve agent access",
+            ["Review and approve agent access in Job Finder before running a task."],
+            None,
+            None,
+        ),
+        "permission_denied": (
+            "Check agent permissions",
+            [
+                "The agent or a tool denied access. Review your CLI and organization permission settings.",
+                "Retry the saved task after access is allowed.",
+            ],
+            None,
+            None,
+        ),
+        "launch_permission_denied": (
+            "Allow the CLI to open",
+            [
+                "The operating system blocked the installed CLI. Check its file permissions or security prompt, then retry."
+            ],
+            None,
+            None,
+        ),
+        "unsupported_cli": (
+            "Update your agent",
+            ["The actual CLI command rejected an option. Update the installed CLI, then retry."],
+            "codex --version" if provider == "codex" else "claude update",
+            url,
+        ),
+        "model_unavailable": (
+            "Choose a supported model",
+            [
+                "In Inputs → Agent settings, choose a model supported by your CLI account.",
+                "Save the inputs, then retry the saved task.",
+            ],
+            None,
+            None,
+        ),
+        "network_error": (
+            "Check the connection",
+            ["Check your internet, proxy, or service status, then retry the saved task."],
+            None,
+            None,
+        ),
+        "rate_limited": (
+            "Agent usage limit reached",
+            ["Wait for your provider allowance to reset or review your plan, then retry."],
+            None,
+            None,
+        ),
+        "agent_budget": (
+            "Task limit reached",
+            ["Increase the task turn or cost limit, or narrow the search, then retry."],
+            None,
+            None,
+        ),
+        "timeout": (
+            "Task timed out",
+            ["Increase the task time limit or narrow the search, then retry."],
+            None,
+            None,
+        ),
+    }
+    title, steps, command, link = recovery.get(
+        code,
+        (
+            "Retry your agent",
+            ["Retry the saved task. If it fails again, check the CLI and provider service status."],
+            None,
+            None,
+        ),
+    )
+    return {
+        "title": title,
+        "steps": steps,
+        **({"command": command} if command else {}),
+        **({"url": link} if link else {}),
+    }
+
+
+def open_provider_login(provider: str) -> dict[str, Any]:
+    command = _resolve_executable(provider) + (
+        ["login"] if provider == "codex" else ["auth", "login"]
+    )
+    try:
+        if sys.platform == "win32":
+            subprocess.Popen(
+                command, shell=False, creationflags=getattr(subprocess, "CREATE_NEW_CONSOLE", 0x10)
+            )
+        elif sys.platform == "darwin":
+            shell_command = shlex.join(command)
+            escaped = shell_command.replace("\\", "\\\\").replace('"', '\\"')
+            subprocess.run(
+                [
+                    "/usr/bin/osascript",
+                    "-e",
+                    f'tell application "Terminal" to do script "{escaped}"',
+                ],
+                check=True,
+                timeout=10,
+                capture_output=True,
+            )
+        else:
+            terminal = next(
+                (
+                    (path, args)
+                    for name, args in (
+                        ("x-terminal-emulator", ["-e"]),
+                        ("gnome-terminal", ["--"]),
+                        ("konsole", ["-e"]),
+                        ("xterm", ["-e"]),
+                    )
+                    if (path := shutil.which(name))
+                ),
+                None,
+            )
+            if not terminal:
+                raise ProviderError(
+                    "login_unavailable",
+                    f"Open a terminal and run {recovery_for(provider, 'auth_required')['command']}, then retry.",
+                )
+            subprocess.Popen(
+                [terminal[0], *terminal[1], *command], shell=False, start_new_session=True
+            )
+    except PermissionError as exc:
+        raise ProviderError(
+            "launch_permission_denied", "The operating system blocked the sign-in window."
+        ) from exc
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise ProviderError(
+            "login_unavailable",
+            f"Could not open sign-in. Run {recovery_for(provider, 'auth_required')['command']} in your terminal, then retry.",
+        ) from exc
+    return {"opened": True, "provider": provider}
 
 
 def _terminate_tree(process: subprocess.Popen[bytes]) -> None:
@@ -157,9 +426,15 @@ def _execute(
                 else 0
             ),
         )
+    except PermissionError as exc:
+        raise ProviderError(
+            "launch_permission_denied",
+            "The operating system blocked the installed agent executable.",
+        ) from exc
     except OSError as exc:
         raise ProviderError(
-            "launch_failed", "Could not start the agent. Check its executable and permissions."
+            "launch_failed",
+            "Could not start the installed agent. Repair its installation, then retry.",
         ) from exc
 
     buffers = [bytearray(), bytearray()]
@@ -242,100 +517,103 @@ def _execute(
     return process.returncode or 0, bytes(buffers[0]), bytes(buffers[1])
 
 
-def _probe(provider: str, executable: str) -> str:
+def _probe(provider: str, command: list[str]) -> str:
     with tempfile.TemporaryDirectory(prefix="job-finder-check-") as directory:
         code, out, _ = _execute(
-            [executable, "--version"], cwd=directory, timeout=8, max_bytes=128_000
+            [*command, "--version"], cwd=directory, timeout=8, max_bytes=128_000
         )
-        version_match = re.search(
-            r"\b\d+\.\d+\.\d+(?:[-+][\w.]+)?\b", out.decode("utf-8", "replace")
-        )
-        version = version_match.group(0) if version_match else "unknown"
-        commands = [[executable, "--help"]]
-        if provider == "codex":
-            commands.append([executable, "exec", "--help"])
-        help_text = ""
-        for command in commands:
-            status, stdout, stderr = _execute(command, cwd=directory, timeout=8, max_bytes=256_000)
-            if status:
-                raise ProviderError(
-                    "unsupported_cli", f"Update {provider}; its help command failed."
-                )
-            help_text += (stdout + stderr).decode("utf-8", "replace")
-        # Newer Claude versions may spell these options with hyphens.
-        help_text = help_text.replace("--allowed-tools", "--allowedTools").replace(
-            "--disallowed-tools", "--disallowedTools"
-        )
-        if code or any(
-            not re.search(re.escape(flag) + r"(?=[\s,=]|$)", help_text)
-            for flag in _REQUIRED_FLAGS[provider]
-        ):
+        version = re.search(r"\b\d+\.\d+\.\d+(?:[-+][\w.]+)?\b", out.decode("utf-8", "replace"))
+        if code or not version:
             raise ProviderError(
-                "unsupported_cli",
-                f"Update {provider}. This installation lacks the safe, structured-output flags "
-                "Job Finder needs. Then run the provider check again.",
+                "version_unavailable",
+                "Version check was unavailable. The actual task can still be tried.",
             )
-        return version
+        return version.group(0)
 
 
 def inspect_providers() -> list[dict[str, Any]]:
-    """Check installations and capabilities without invoking a model or reading credentials."""
+    """Discover installations without invoking a model or reading credentials."""
     result = []
-    for provider in _REQUIRED_FLAGS:
+    for provider in _PROVIDERS:
         try:
-            version = _probe(provider, _resolve_executable(provider))
-            result.append(
-                {
-                    "id": provider,
-                    "available": True,
-                    "version": version,
-                    "message": "CLI ready. Sign-in is checked when a run starts.",
-                }
-            )
+            command = _resolve_executable(provider)
         except ProviderError as exc:
             result.append(
                 {
                     "id": provider,
+                    "installed": exc.code == "node_missing",
                     "available": False,
+                    "path": None,
                     "version": None,
+                    "advisory": "",
                     "message": exc.message,
                     "code": exc.code,
+                    "recovery": recovery_for(provider, exc.code),
                 }
             )
+            continue
+        version, advisory = None, ""
+        try:
+            version = _probe(provider, command)
+        except ProviderError as exc:
+            advisory = exc.message
+        result.append(
+            {
+                "id": provider,
+                "installed": True,
+                "available": True,
+                "path": command[-1],
+                "version": version,
+                "advisory": advisory,
+                "message": "Installed. Sign-in and access are checked by the actual task.",
+            }
+        )
     return result
 
 
+def _failure_text(output: bytes) -> tuple[str, bool]:
+    text = output.decode("utf-8", "replace")
+    try:
+        documents = [json.loads(text)]
+    except (ValueError, UnicodeDecodeError):
+        documents = []
+        for line in text.splitlines():
+            try:
+                documents.append(json.loads(line))
+            except (ValueError, UnicodeDecodeError):
+                pass
+    if not documents:
+        return text.lower(), False
+    messages, denied = [], False
+
+    def errors(value):
+        if isinstance(value, str):
+            messages.append(value)
+        elif isinstance(value, list):
+            for item in value:
+                errors(item)
+        elif isinstance(value, dict):
+            for key in ("message", "error", "errors", "code", "type", "status_code"):
+                if key in value:
+                    errors(value[key])
+        elif isinstance(value, int) and not isinstance(value, bool):
+            messages.append(str(value))
+
+    for document in documents:
+        if not isinstance(document, dict):
+            continue
+        denied |= bool(document.get("permission_denials"))
+        for key in ("error", "errors", "message", "subtype", "status_code"):
+            if key in document:
+                errors(document[key])
+        if document.get("is_error") and isinstance(document.get("result"), str):
+            errors(document["result"])
+    return "\n".join(messages).lower(), denied
+
+
 def _provider_failure(provider: str, output: bytes, exit_code: int = 0) -> ProviderError:
-    # Classification can inspect output; nothing from it is exposed to the user.
-    lowered = output.decode("utf-8", "replace").lower()
-    if any(
-        term in lowered
-        for term in (
-            "not logged",
-            "unauthorized",
-            "authentication",
-            "api key",
-            "401",
-            "login required",
-            "please log in",
-        )
-    ):
-        command = "codex login" if provider == "codex" else "claude auth login"
-        return ProviderError(
-            "auth_required", f"Sign in with `{command}`, then resume the search."
-        )
-    if any(term in lowered for term in ("rate limit", "usage limit", "quota", "429")):
-        return ProviderError(
-            "rate_limited", "Agent usage limit reached. Wait for your limit to reset, then resume."
-        )
-    if any(
-        term in lowered
-        for term in ("max_turns", "max turns", "max_budget", "max budget", "budget limit")
-    ):
-        return ProviderError(
-            "agent_budget",
-            "Agent turn or cost limit reached. Increase the limit or narrow the request, then resume.",
-        )
+    # Query/tool inputs and private result objects are never diagnostic evidence.
+    lowered, denied = _failure_text(output)
     if any(
         term in lowered
         for term in (
@@ -347,18 +625,86 @@ def _provider_failure(provider: str, output: bytes, exit_code: int = 0) -> Provi
         )
     ):
         return ProviderError(
-            "unsupported_cli", f"Update {provider}, then run the provider check again."
+            "unsupported_cli",
+            f"The installed {provider} rejected a task option. Update the CLI, then retry.",
+        )
+    if any(term in lowered for term in ("model_not_found", "unsupported_model", "model_access_denied")) or (
+        re.search(r"\bmodels?\b", lowered)
+        and any(
+            term in lowered
+            for term in (
+                "not_found_error", "not found", "does not exist", "not supported", "unsupported",
+                "not available", "not authorized", "do not have access", "does not have access",
+                "don't have access",
+            )
+        )
+    ):
+        return ProviderError(
+            "model_unavailable",
+            "The selected model is unavailable for this CLI account. Choose a supported model in Inputs → Agent settings, then retry.",
+        )
+    if any(
+        term in lowered
+        for term in (
+            "not logged",
+            "unauthorized",
+            "authentication failed",
+            "authentication required",
+            "authentication_error",
+            "invalid api key",
+            "missing api key",
+            "login required",
+            "please log in",
+        )
+    ) or re.search(r"\b401\b", lowered):
+        command = "codex login" if provider == "codex" else "claude auth login"
+        return ProviderError("auth_required", f"Sign in with {command}, then retry the saved task.")
+    if (
+        denied
+        or any(
+            term in lowered
+            for term in (
+                "permission denied",
+                "permission_denied",
+                "permission denial",
+                "not permitted",
+                "not allowed",
+                "access denied",
+                "access is denied",
+                "operation not permitted",
+                "requires approval",
+            )
+        )
+        or re.search(r"\b403\b", lowered)
+    ):
+        return ProviderError(
+            "permission_denied",
+            "The agent or a tool denied access. Review its permission settings, then retry.",
+        )
+    if any(term in lowered for term in ("rate limit", "usage limit", "quota")) or re.search(
+        r"\b429\b", lowered
+    ):
+        return ProviderError(
+            "rate_limited", "Agent usage limit reached. Wait for your limit to reset, then retry."
+        )
+    if any(
+        term in lowered
+        for term in ("max_turns", "max turns", "max_budget", "max budget", "budget limit")
+    ):
+        return ProviderError(
+            "agent_budget",
+            "Agent turn or cost limit reached. Increase the limit or narrow the request, then retry.",
         )
     if any(term in lowered for term in ("connection", "network", "timed out", "dns", "tls")):
         return ProviderError(
             "network_error",
-            "The agent could not reach its service. Check the connection, then resume.",
+            "The agent could not reach its service. Check the connection, then retry.",
         )
     return ProviderError(
         "provider_failed",
         f"{provider.title()} could not complete this item"
         + (f" (exit {exit_code})" if exit_code else "")
-        + ". Check the CLI sign-in and service status, then resume.",
+        + ". Retry the saved task or check the provider service status.",
     )
 
 
@@ -380,8 +726,9 @@ class AgentRunner:
         max_cost_usd: float = 1.0,
         max_output_bytes: int = 2_000_000,
         executable: str | None = None,
+        allow_tools: bool = False,
     ):
-        if provider not in _REQUIRED_FLAGS:
+        if provider not in _PROVIDERS:
             raise ProviderError("unsupported_provider", "Choose Codex or Claude Code.")
         if (
             not math.isfinite(timeout)
@@ -399,8 +746,7 @@ class AgentRunner:
         self.max_cost_usd = max_cost_usd
         self.max_output_bytes = max_output_bytes
         self.executable = executable
-        self._checked_executable: str | None = None
-        self._probe_lock = threading.Lock()
+        self.allow_tools = allow_tools
 
     def run(
         self,
@@ -410,17 +756,17 @@ class AgentRunner:
         web: bool = True,
         cancel: threading.Event | None = None,
     ) -> AgentResult:
+        if not self.allow_tools:
+            raise ProviderError(
+                "consent_required", "Approve agent tool access in Job Finder before running a task."
+            )
         if len(prompt.encode("utf-8")) > 400_000:
             raise ProviderError(
                 "input_limit", "The agent input is too large. Reduce the source material."
             )
         if cancel and cancel.is_set():
             raise ProviderError("cancelled", "Agent run cancelled.")
-        executable = _resolve_executable(self.provider, self.executable)
-        with self._probe_lock:
-            if self._checked_executable != executable:
-                _probe(self.provider, executable)
-                self._checked_executable = executable
+        command = _resolve_executable(self.provider, self.executable)
         with tempfile.TemporaryDirectory(prefix="job-finder-agent-") as directory:
             schema_path = Path(directory) / "schema.json"
             result_path = Path(directory) / "result.json"
@@ -430,62 +776,33 @@ class AgentRunner:
             if self.provider == "codex":
                 schema_path.write_text(schema_json, encoding="utf-8")
                 argv = [
-                    executable,
+                    *command,
                     "exec",
-                    "--ignore-user-config",
+                    "--dangerously-bypass-approvals-and-sandbox",
                     "--ephemeral",
                     "--skip-git-repo-check",
-                    "--sandbox",
-                    "read-only",
                     "--json",
-                    "--strict-config",
                     "--color",
                     "never",
-                    "-c",
-                    'approval_policy="never"',
-                    "-c",
-                    f'web_search="{"live" if web else "disabled"}"',
-                    "-c",
-                    "features.shell_tool=false",
-                    "-c",
-                    "features.apps=false",
-                    "-c",
-                    "features.multi_agent=false",
-                    "-c",
-                    "features.plugins=false",
-                    "-c",
-                    "features.hooks=false",
-                    "-c",
-                    "features.memories=false",
                     "--output-schema",
                     str(schema_path),
                     "--output-last-message",
                     str(result_path),
                 ]
+                if web:
+                    argv += ["-c", 'web_search="live"']
                 if self.model:
                     argv += ["--model", self.model]
                 argv += ["-"]
             else:
-                permitted_tools = "WebSearch,WebFetch" if web else ""
                 argv = [
-                    executable,
-                    "--safe-mode",
+                    *command,
+                    "--dangerously-skip-permissions",
                     "-p",
                     "--output-format",
                     "json",
                     "--json-schema",
                     schema_json,
-                    "--tools",
-                    permitted_tools,
-                    "--allowedTools",
-                    permitted_tools,
-                    "--disallowedTools",
-                    "mcp__*",
-                    "--strict-mcp-config",
-                    "--mcp-config",
-                    '{"mcpServers":{}}',
-                    "--permission-mode",
-                    "dontAsk",
                     "--no-session-persistence",
                     "--max-turns",
                     str(self.max_turns),
@@ -559,6 +876,8 @@ class AgentRunner:
             raise _provider_failure("claude", stdout)
         data = envelope.get("structured_output")
         if not isinstance(data, dict):
+            if envelope.get("permission_denials"):
+                raise _provider_failure("claude", stdout)
             raise ProviderError(
                 "missing_result", "Claude returned no structured result. Resume to retry this item."
             )

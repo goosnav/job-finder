@@ -6,7 +6,7 @@ import secrets
 import threading
 import time
 from contextlib import asynccontextmanager
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import FastAPI, File, Form, Request, UploadFile
 from fastapi.exceptions import RequestValidationError
@@ -20,7 +20,7 @@ from .config import AppError, static_root
 from .files import MAX_FILE
 from .models import RunRequest, SearchInput, SuppressionInput
 from .pipeline import Jobs
-from .providers import inspect_providers
+from .providers import ProviderError, inspect_providers, open_provider_login, recovery_for
 from .service import Service
 
 
@@ -85,16 +85,27 @@ def create_app(service: Service | None = None, *, on_quit=None, testing: bool = 
     async def unexpected(request, exc):
         return JSONResponse({"error": {"code": "APP-ERROR", "message": "The operation failed. Saved work is intact. Try again."}}, status_code=500)
 
+    @app.exception_handler(ProviderError)
+    async def provider_error(request, exc):
+        provider = request.path_params.get("provider", "codex")
+        return JSONResponse({"error": {"code": exc.code, "message": exc.message, "provider": provider, "recovery": recovery_for(provider, exc.code)}}, status_code=400)
+
     @app.get("/health/ready")
     def ready():
         return {"ready": app.state.ready, "app": "job-finder", "version": __version__}
 
     @app.get("/api/session")
-    def get_session():
-        if time.monotonic() - provider_cache["at"] > 20:
+    def get_session(refresh: bool = False):
+        if refresh or time.monotonic() - provider_cache["at"] > 20:
             provider_cache["value"] = inspect_providers()
             provider_cache["at"] = time.monotonic()
         return {"token": session, "version": __version__, "providers": provider_cache["value"], "data_directory": str(service.store.root)}
+
+    @app.post("/api/providers/{provider}/login")
+    def provider_login(provider: Literal["codex", "claude"]):
+        open_provider_login(provider)
+        provider_cache["at"] = 0
+        return {"message": "Complete sign-in in the agent window, then retry your task in Job Finder."}
 
     @app.get("/api/searches")
     def searches():

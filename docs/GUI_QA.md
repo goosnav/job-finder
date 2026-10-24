@@ -6,6 +6,7 @@ The browser smoke check uses the running app, local API, and SQLite workspace. I
 
 ```sh
 uv run --project app python scripts/smoke_gui.py
+uv run --project app python scripts/smoke_agent_recovery.py
 ```
 
 The script starts a temporary loopback server and removes its test workspace afterward. The default check makes no model calls. Screenshots go to `dev/qa/`.
@@ -13,6 +14,8 @@ The script starts a temporary loopback server and removes its test workspace aft
 Use an existing isolated server with `--url http://127.0.0.1:PORT`. This mode writes test searches to that server's workspace.
 
 Add `--run-agent` to make one real profile call with the synthetic résumé. This requires a signed-in provider and uses its account limits.
+
+`smoke_agent_recovery.py` runs on macOS or Linux. It creates local executable CLI fixtures and exercises both provider adapters through the browser. Sign-in window requests are intercepted; no real login or model call occurs. Use `--output DIRECTORY` to retain screenshots.
 
 ## Current checks
 
@@ -32,16 +35,27 @@ Add `--run-agent` to make one real profile call with the synthetic résumé. Thi
 | Keyboard | A checkbox retains focus after selection; Tab continues through the interface. |
 | Layout | Intake and results have no page overflow at 320, 390, 768, and desktop widths. |
 | Reopen | A reload restores saved jobs. |
+| Agent consent | Cancel starts no task; Allow & run persists approval for that search. |
+| Agent recovery | Both provider adapters retain specific sign-in and permission failures without private output. |
+| Retry | Check again refreshes detection; retry preserves inputs and reaches Plan; switching agents also reaches Plan. |
+| Quit | The header control works by keyboard at 320 pixels, warns about unsaved changes, and stops the actual server. |
 
 The script also fails on uncaught JavaScript errors and unexpected HTTP errors. Expected résumé validation failures are allowed.
 
 ## Verification status
 
-The full production browser check passed, including the duplicate-submission regression. An independent repeat of the main workflow also passed.
+The production GUI check and both-provider consent/recovery check passed. These include duplicate-submission prevention, preserved inputs, retry, and actual shutdown. An independent repeat of the main workflow also passed.
 
-A live browser plan check also passed with the synthetic résumé. A real Codex profile completed in one call. A separate one-job report completed in two calls and produced CSV and Excel exports. These checks verify the provider path; they do not measure recommendation quality across real résumés.
+The unit suite passed 273 tests with one existing warning. Ruff passed.
+
+Claude Code 2.1.304 completed a real web task using existing sign-in and reported USD 0.0277. Codex 0.144.1 reached the provider but returned `model_unavailable` for both the inherited and explicitly tested models. The account's model access limits current live Codex use. The GUI offers **Choose model** or the other installed agent. No successful live Codex task is verified for this adapter revision.
+
+The Windows CI suite checks direct PowerShell under RemoteSigned and the CMD opener. It also runs both npm transports through Node with shell shims present and developer tools absent from PATH. See the [current CI results](https://github.com/goosnav/job-finder/actions/workflows/test.yml). This automated check is not full native-image acceptance.
 
 ## Screenshots
+
+- [`agent-consent.png`](screenshots/agent-consent.png): explicit tool-access approval.
+- [`agent-recovery.png`](screenshots/agent-recovery.png): persistent sign-in recovery with direct actions.
 
 - [`intake.png`](screenshots/intake.png): résumé, targets, location, salary, work arrangement, and provider.
 - [`search-plan.png`](screenshots/search-plan.png): suggested roles and candidate assessment.
@@ -53,4 +67,4 @@ A live browser plan check also passed with the synthetic résumé. A real Codex 
 
 ## Limits
 
-The default browser check imports fictional jobs; it does not test live discovery or outreach quality. No messages or applications are sent. Headless browser checks do not establish native acceptance of macOS, Windows, or Linux launchers. M1a remains ACTIVE until the full native matrix passes.
+The default browser check imports fictional jobs; it does not test live discovery or outreach quality. The recorded fixture tests send no messages or applications. Approved live agents can take external actions through configured tools. Headless browser checks do not establish native acceptance of macOS, Windows, or Linux launchers. M1a remains ACTIVE until the full native matrix passes.

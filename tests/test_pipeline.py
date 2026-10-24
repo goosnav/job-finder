@@ -19,15 +19,6 @@ class Payload(Model):
 
 @pytest.fixture
 def make_service(tmp_path, monkeypatch):
-    monkeypatch.setattr(
-        pipeline,
-        "inspect_providers",
-        lambda: [
-            {"id": name, "available": True, "message": ""}
-            for name in ("claude", "codex")
-        ],
-    )
-
     def inspect_fixture(url, cancel=None):
         try:
             return {
@@ -73,6 +64,7 @@ def make_service(tmp_path, monkeypatch):
                 "preferences": {"roles": ["Manufacturing Engineer"]},
                 "settings": {
                     "provider": "claude",
+                    "agent_tools_approved": True,
                     "concurrency": 1,
                     "max_cost_usd": 20,
                     "min_fit": 0,
@@ -707,19 +699,11 @@ def test_unpriced_codex_does_not_consume_claude_allowance(make_service, install_
     assert saved["cost_unreported_calls"] == 1 and saved["unpriced_calls"] == 3
 
 
-def test_preflight_only_requires_providers_for_selected_stages(
+def test_research_only_invokes_its_selected_provider(
     make_service, monkeypatch, install_runner
 ):
     service, search = make_service(
         settings={"provider": "codex", "routes": {"outreach": {"provider": "claude"}}}
-    )
-    monkeypatch.setattr(
-        pipeline,
-        "inspect_providers",
-        lambda: [
-            {"id": "codex", "available": True},
-            {"id": "claude", "available": False, "message": "Install Claude."},
-        ],
     )
     install_runner(lambda record, cancel: research_data(service, record))
     manager = Jobs(service)
@@ -727,8 +711,6 @@ def test_preflight_only_requires_providers_for_selected_stages(
         manager.create(search["id"], "research", background=False)["status"]
         == "completed"
     )
-    with pytest.raises(AppError, match="Install Claude"):
-        manager.create(search["id"], "pipeline", background=False)
 
 
 def test_direct_ats_discovery_ranks_titles_before_retaining_target(
@@ -1000,16 +982,18 @@ def test_changed_targets_discover_new_jobs_and_preserve_tracked_history(
     assert len(discoveries) == 2 and len(service.store.list("opportunities", search["id"])) == 2
 
 
-def test_report_preflight_does_not_require_outreach_provider(tmp_path, monkeypatch):
-    monkeypatch.setattr(pipeline, "inspect_providers", lambda: [{"id": "codex", "available": True}])
+def test_preflight_requires_consent_and_does_not_reject_unprobed_agents(tmp_path):
     service = Service(tmp_path)
     search = service.create_search({"name": "Report", "objective": "Engineering", "settings": {
         "provider": "codex", "routes": {"outreach": {"provider": "claude"}},
     }})
     manager = Jobs(service)
-    manager.preflight(search, "report")
-    with pytest.raises(pipeline.AppError, match="Set up claude"):
+    with pytest.raises(pipeline.AppError, match="Approve agent tool access"):
         manager.preflight(search, "pipeline")
+    assert not service.store.list("runs")
+    approved = service.update_search(search["id"], {"settings": {"agent_tools_approved": True}})
+    manager.preflight(approved, "report")
+    manager.preflight(approved, "pipeline")
 
 
 def test_live_old_posting_and_today_deadline_are_not_expired():

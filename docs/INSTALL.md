@@ -6,6 +6,8 @@ Clone the repository, then double-click **Open Job Finder.cmd**. You can also ru
 
 First setup needs internet and shows progress in the terminal. The browser opens when the app is ready. Keep the terminal open; use **Quit Job Finder** in the app to stop it. Opening the launcher again returns to the running app. After setup, cached launches work offline; job research still needs the network and a signed-in agent.
 
+If a direct PowerShell launch fails, read the error in its console and use **Open Job Finder.cmd**. CMD sets an execution-policy bypass for its child PowerShell process only. It does not change the system execution policy. Do not change your system policy to launch this app.
+
 ## Command and script preview
 
 Extract `Job-Finder-Script-Preview.zip`. On a Mac, double-click `Open Job Finder.command`. On Windows, double-click `Open Job Finder.cmd`; PowerShell users can run the `.ps1` file. On Linux, run `./Open\ Job\ Finder.sh`.
@@ -44,11 +46,23 @@ The macOS launcher requires macOS 13 or later, matching the [minimum supported b
 
 First setup requires internet access. Customers do not need to install Python, pip, Go, Node.js, or a compiler to run a built ZIP. Search plans and research require an installed, authenticated Codex or Claude Code CLI. Provider subscriptions and usage limits are separate from this application.
 
-The app opens your saved searches or a blank **New search** form. Upload a résumé or enter targets and a description. Set location, salary, and work arrangement, then choose **Build search plan**. Review **Plan**, choose **Find jobs**, then download **CSV** or **Excel** from **Jobs**. **Save search** saves inputs without a model call. The production UI does not offer demo mode.
+The app opens your saved searches or a blank **New search** form. Upload a résumé or enter targets and a description. Set location, salary, and work arrangement, then choose **Build search plan**. Review the tool-access notice and choose **Allow & run**. Review **Plan**, choose **Find jobs**, then download **CSV** or **Excel** from **Jobs**. **Save search** saves inputs without a model call.
 
 These images are unsigned. macOS Gatekeeper and Windows SmartScreen can show trust prompts. Linux file managers may require the launcher executable permission to be enabled. If the AppImage cannot use FUSE, start it with `--appimage-extract-and-run`; the adjacent `app/` path remains unchanged.
 
-Use **Quit** in the app to stop its local server. Closing a browser tab leaves it running; opening the launcher again returns to the same instance.
+Use **Quit** in the header to stop the local server. Its confirmation warns about unsaved inputs and edits; saved results remain. Closing a browser tab leaves the app running; opening the launcher again returns to the same instance.
+
+## Connect your agent
+
+Job Finder detects standard native and npm installations of Codex and Claude Code. It checks common installation folders when the desktop PATH is stale. Existing CLI sign-in is reused. An unavailable version probe does not block a task; the task checks authentication and access.
+
+The first agent task asks for approval saved to that search. **Allow & run** permits commands, file reads and changes, internet access, and connected tools under your account. Documents and webpages can influence the agent's actions. Approved tasks inherit your CLI configuration and use full tool permissions; separate CLI hook-trust decisions still apply. Revoke approval under **Inputs → Agent settings**.
+
+If sign-in is needed, choose **Sign in to Codex** or **Sign in to Claude Code**. Complete the installed CLI's sign-in in the terminal window, return to the app, and choose **Retry task**. If the window cannot open, run the displayed fixed sign-in command yourself. Job Finder does not collect your provider credentials.
+
+After an installation change, choose **Check again**. A task failure shows a specific recovery step for sign-in, permissions, network, model access, or usage limits. Repair that issue and choose **Retry task**. Your résumé, preferences, and completed results remain saved. Profile retries return to **Plan**; report retries return to **Jobs**.
+
+For `model_unavailable`, choose **Choose model**, enter a model available to your CLI account, save, and retry. You can also use the other installed agent. The app does not change your CLI's default model.
 
 ## Source checkout
 
@@ -68,7 +82,7 @@ The launcher uses `data/`, `config/`, `logs/`, `python/`, `runtimes/`, `runtime/
 
 The setup page shows a short error code and log location. Network/TLS failures allow a bounded retry; missing or damaged release files require extracting a complete clean copy. The previous ready runtime is preserved when a dependency update fails. If the default browser cannot open, the launcher writes the exact local URL to `logs/OPEN_THIS_URL.txt`.
 
-If an agent is not found, confirm its command works in a terminal. Finder and desktop launchers may inherit a different PATH. `JOB_FINDER_CODEX_BIN` and `JOB_FINDER_CLAUDE_BIN` can specify executable paths when launching from a terminal.
+If an agent is not found, confirm that its command works in a terminal, then choose **Check again**. An npm installation also needs its Node.js runtime. Optional developer overrides `JOB_FINDER_CODEX_BIN` and `JOB_FINDER_CLAUDE_BIN` select a custom installation; standard installations need neither variable.
 
 ## Build the native ZIP
 

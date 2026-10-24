@@ -110,6 +110,8 @@ def run_checks(args):
             form.requestSubmit(buttons[plan ? 0 : 1]);
         }''', args.run_agent)
         if args.run_agent:
+            expect(page.locator('#agent-consent-dialog')).to_be_visible()
+            page.get_by_role('button', name='Allow & run', exact=True).click()
             expect(page.locator('.search-plan')).to_be_visible(timeout=180000)
             expect(page.locator('.plan-roles li').first).to_be_visible()
             expect(page.locator('.plan-constraints')).to_contain_text('USD 120,000')

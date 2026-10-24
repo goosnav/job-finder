@@ -1,6 +1,6 @@
 # Security and data boundaries
 
-Job Finder is a local research and draft-preparation app. It stores candidate material and search activity on the user's computer, and sends selected task inputs to the chosen Codex or Claude Code provider when a live task runs. It does not send emails, submit applications, create job-board accounts, or run a hosted multi-user service.
+Job Finder stores candidate material and search activity locally, and sends task inputs to the chosen Codex or Claude Code provider. The app has no Send or Apply workflow. Approved agent tools can change files and take external actions through the user's configured connections.
 
 ## Candidate data and credentials
 
@@ -8,7 +8,7 @@ The SQLite workspace contains extracted résumé text, explicit candidate facts,
 
 Native launches use `JobFinder` under the operating system's application-data location. This is separate from Auto Outbound and from the extracted program folder. The app attempts restrictive directory/database permissions where the platform supports them. It does not implement database encryption; operating-system account security, disk encryption, and backup handling remain relevant to private résumé and job-search data. Source/CLI users can choose a location with `JOB_FINDER_DATA` or the CLI data option.
 
-Provider authentication stays with the installed CLI. Job Finder does not add a provider-token form or copy an authentication database. The provider process still runs as the current user and uses its normal authentication environment. Original candidate material is supplied to the offline profile task; bounded relevant excerpts and the resulting brief support later research. Public search queries are built from job criteria, with prompts explicitly excluding private identity and résumé details. That prompt instruction is not a data-loss-prevention guarantee for a third-party model.
+Provider authentication stays with the installed CLI. Job Finder does not add a provider-token form or copy an authentication database. The provider process runs as the current user and uses its normal authentication environment. Original candidate material is supplied to the profile task; relevant excerpts and the resulting brief support later research. Public search queries are built from job criteria, with prompts explicitly excluding private identity and résumé details. That prompt instruction is not a data-loss-prevention guarantee for a third-party model.
 
 ## Local HTTP boundary
 
@@ -18,17 +18,21 @@ This boundary is intended to resist websites making requests to a local app. It 
 
 ## Agent execution
 
-The adapters use explicit argument arrays with `shell=False` and an isolated temporary working directory. Résumé text, prompts, model names, and schema content never become shell commands. Windows batch wrappers are rejected in favor of native executables. Capability probes reject CLIs that lack the required isolation or structured-output options.
+`settings.agent_tools_approved` defaults to `false`. Before the first live task, the GUI requires **Allow & run** after it shows the access notice. Approval persists per search. CLI users grant it with `run --allow-agent-tools`; API clients must obtain equivalent consent before setting it to `true`. Revocation blocks future agent tasks.
 
-Codex runs with a read-only sandbox, ephemeral state, a strict configuration, and shell/apps/plugins/hooks/memory features disabled. Claude uses safe mode, no session persistence, an empty strict MCP configuration, and an explicit tool allowlist. Web research permits web tools; profile and drafting calls disable web access. Process input/output sizes, elapsed time, and cancellation are bounded. Raw provider errors are mapped to safe application error codes rather than returned wholesale to the browser.
+Approved tasks inherit the user's CLI configuration, connected tools, and existing sign-in. Codex receives `--dangerously-bypass-approvals-and-sandbox`; Claude receives `--dangerously-skip-permissions`. Job Finder adds no tool allowlist, safe mode, or separate restriction on profile/draft tools. Separate CLI hook-trust decisions still apply.
 
-These controls reduce the available actions; they do not prove that a model will interpret every adversarial webpage correctly. Retrieved pages, uploaded documents, and model responses are treated as untrusted input. Typed contracts, provenance checks, independent source checks, and human review provide additional layers. The app has no send/apply adapter for injected content to invoke.
+The agent can use the internet, run commands, read or change files, and use connected tools under the user's account. Instructions in uploaded documents and webpages can influence those actions. Typed outputs, provenance checks, and human review help assess saved results; they do not confine an approved agent's actions.
+
+The transport uses explicit argument arrays with `shell=False` and passes prompts through stdin. It starts in a temporary working directory. That directory is not a file-access boundary. Standard native and npm installations are detected automatically; npm transports invoke Node.js directly instead of a shell shim. Version probes are advisory. The actual task checks authentication, option support, and access.
+
+Process input/output sizes, elapsed time, and cancellation are bounded. Provider failures produce stable error codes and recovery steps instead of raw stderr. The protected sign-in endpoint opens only the fixed `codex login` or `claude auth login` command in a native console.
 
 ## Public network access
 
 The independent fetcher accepts public HTTP(S) URLs without embedded credentials. It rejects non-public resolved addresses, checks redirects again, and connects to a previously validated IP while preserving TLS hostname validation. Requests have byte, content-type, redirect, timeout, and cancellation limits. Direct ATS adapters additionally restrict requests and redirects to their documented API hosts.
 
-Supported public ATS feeds do not require signing into a job board. Unsupported URLs and partial feed failures produce warnings and preserve any valid records already read. The system does not bypass authentication, paywalls, or access controls.
+Supported public ATS feeds do not require signing into a job board. Unsupported URLs and partial feed failures produce warnings and preserve valid records. These public-source adapters do not bypass authentication, paywalls, or access controls. Their network checks do not restrict approved agent tools.
 
 ## Evidence and contact integrity
 
@@ -42,7 +46,7 @@ Several distinctions are deliberate:
 
 These checks are evidence filters, not guarantees of factual correctness, contact deliverability, or hiring suitability. The UI retains source URLs, dates, uncertainty, and blockers for review. Approval and export guards are separate from the fit score.
 
-Address suppression blocks outreach to that address while preserving a valid website application. Domain exclusion blocks the employer's actions. Prior application/contact activity is retained so exports can identify duplicate outreach across searches. No message is sent by an approval action.
+Address suppression blocks outreach exports to that address while preserving a valid website application. Domain exclusion blocks the employer's action exports. Prior application/contact activity is retained so exports can identify duplicate outreach across searches. Outreach approval only changes the local review record; it does not start a send task.
 
 ## Files and exports
 

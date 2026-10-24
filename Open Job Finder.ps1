@@ -1,3 +1,4 @@
+param([switch]$NoPause)
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 
@@ -115,6 +116,10 @@ try {
     exit $LASTEXITCODE
 } catch {
     Write-Host $_.Exception.Message -ForegroundColor Red
+    Write-Host 'Double-click Open Job Finder.cmd for the Windows launch path. It does not change your system execution policy.'
+    if (-not $NoPause -and [Environment]::UserInteractive -and -not [Console]::IsInputRedirected) {
+        Read-Host 'Press Enter to close'
+    }
     exit 1
 } finally {
     if ($setupLock) { $setupLock.Dispose() }
