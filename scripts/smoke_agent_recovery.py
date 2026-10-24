@@ -233,6 +233,23 @@ def exercise_provider(page, url, fixture, provider, output, login_requests):
         screenshot(page, output, "model-settings-320.png")
         model.fill("fixture-supported-model")
 
+    # A poll can read "running" just before the search snapshot sees completion.
+    def stale_run_snapshot(route):
+        if route.request.method != "GET":
+            route.continue_()
+            return
+        deadline = time.monotonic() + 15
+        while True:
+            response = route.fetch()
+            body = response.json()
+            if body["run"]["status"] == "completed":
+                body["run"]["status"] = "running"
+                route.fulfill(response=response, json=body)
+                return
+            assert time.monotonic() < deadline, body
+            time.sleep(0.05)
+
+    page.route("**/api/runs/*", stale_run_snapshot)
     mode.write_text("success")
     recovery.get_by_role("button", name="Retry task", exact=True).click()
     expect(page.locator(".search-plan")).to_be_visible(timeout=20000)
@@ -258,7 +275,10 @@ def exercise_provider(page, url, fixture, provider, output, login_requests):
     page.get_by_role("button", name="Inputs", exact=True).click()
     page.locator(".agent-settings > summary").click()
     assert not page.locator('input[name="settings.agent_tools_approved"]').count()
-    page.get_by_role("button", name="Revoke access", exact=True).click()
+    revoke = page.get_by_role("button", name="Revoke access", exact=True)
+    expect(revoke).to_be_enabled(timeout=5000)
+    page.unroute("**/api/runs/*", stale_run_snapshot)
+    revoke.click()
     expect(
         page.get_by_text("Tool access is approved when you start a task.")
     ).to_have_count(1)

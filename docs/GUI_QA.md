@@ -38,6 +38,7 @@ Add `--run-agent` to make one real profile call with the synthetic résumé. Thi
 | Agent consent | Cancel starts no task; Allow & run persists approval for that search. |
 | Agent recovery | Both provider adapters retain specific sign-in and permission failures without private output. |
 | Retry | Check again refreshes detection; retry preserves inputs and reaches Plan; switching agents also reaches Plan. |
+| Completion | A stale running poll followed by a completed search snapshot releases task controls and permits revoking access. |
 | Quit | The header control works by keyboard at 320 pixels, warns about unsaved changes, and stops the actual server. |
 
 The script also fails on uncaught JavaScript errors and unexpected HTTP errors. Expected résumé validation failures are allowed.

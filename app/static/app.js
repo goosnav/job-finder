@@ -150,13 +150,14 @@
   }
   async function refresh({quiet=false}={}){
     if(!state.activeId)return;const id=state.activeId;const detail=await api(`/api/searches/${id}`);if(id!==state.activeId)return;
-    state.detail=detail;await listSearches();if(state.view==='intake')return;
+    state.detail=detail;const current=(detail.runs||[]).find(r=>r.id===state.run?.id);if(current)state.run=current;await listSearches();if(state.view==='intake')return;
     if(!quiet){const latest=latestRun();if(latest&&latest.id!==state.run?.id){state.run=latest;state.events=[];if(active())state.pollTimer=setTimeout(pollRun,100);}}
     if(state.view==='setup'&&state.configDirty){navigation();renderRun();return;}
     if(quiet&&['opportunities','outreach','shortlist'].includes(state.view)){$('.nav-tabs').outerHTML=tabs();table();renderRun();}else render();
   }
   function renderRun(){
     renderRecovery();
+    $$('[data-action="revoke-agent-tools"]').forEach(button=>{button.disabled=active();button.title=active()?'Pause the task to change access':'';});
     $$('[data-action="run"]').forEach(button=>button.disabled=active());$$('[data-action="export"]').forEach(button=>button.disabled=active()||!opportunities().length||(demo()&&['apply','outreach'].includes(button.dataset.scope||state.exportScope))||({all:stats().total,apply:stats().apply,outreach:stats().outreach,shortlist:stats().shortlisted}[button.dataset.scope||state.exportScope]===0));
     const region=$('#job-region'),r=state.run;if(!r||state.dismissed.has(r.id)||(r.status==='failed'&&r.recovery)){region.innerHTML='';return;}
     const total=Number(r.total||0),done=Number(r.completed||0),stageIndex=Number(r.stage_index||0),stageCount=Number(r.stage_count||1),fraction=total?done/total:0;
