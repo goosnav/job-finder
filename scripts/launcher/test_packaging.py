@@ -3,6 +3,7 @@
 import hashlib
 import importlib.util
 import json
+import os
 import tempfile
 import unittest
 import zipfile
@@ -20,6 +21,17 @@ package = load_module("package_universal")
 
 
 class ReleaseBoundaryTests(unittest.TestCase):
+    def test_windows_source_bootstrap_matches_the_pinned_tool_release(self):
+        root = Path(__file__).resolve().parents[2]
+        config = json.loads((root / 'app/launcher/windows-bootstrap.json').read_text())
+        pins = json.loads((root / 'scripts/launcher/tool-versions.json').read_text())
+        self.assertEqual(config['uv'], pins['uv'])
+        self.assertEqual(set(config['targets']), {'x64', 'arm64'})
+        for arch, triple in [('x64', 'x86_64-pc-windows-msvc'), ('arm64', 'aarch64-pc-windows-msvc')]:
+            self.assertEqual(config['targets'][arch]['triple'], triple)
+            self.assertRegex(config['targets'][arch]['sha256'], r'^[0-9a-f]{64}$')
+
+    @unittest.skipIf(os.name == 'nt', 'Windows filesystems do not store Unix executable bits')
     def test_script_preview_requires_every_supervisor_and_executable_script(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -62,6 +74,7 @@ class ReleaseBoundaryTests(unittest.TestCase):
             checks.append(hashlib.sha256(tool.read_bytes()).hexdigest() + "  " + name)
         (root / "launcher/checksums.sha256").write_text("\n".join(checks) + "\n")
 
+    @unittest.skipIf(os.name == 'nt', 'Windows filesystems do not store Unix executable bits')
     def test_unix_setup_tool_without_execute_bit_is_rejected(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -97,6 +110,7 @@ class ReleaseBoundaryTests(unittest.TestCase):
                 with self.assertRaises(SystemExit):
                     package.add_path(archive, secret, Path("app/.env"))
 
+    @unittest.skipIf(os.name == 'nt', 'Windows filesystems do not store Unix executable bits')
     def test_executable_mode_survives_zip(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

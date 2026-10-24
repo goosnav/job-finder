@@ -1,0 +1,13 @@
+{
+  "uv": "0.13.5",
+  "targets": {
+    "x64": {
+      "triple": "x86_64-pc-windows-msvc",
+      "sha256": "f45d1cb9d9140ca6d3f4005fdfc0ebeccf849fd04d1dc85804155cb923f1597b"
+    },
+    "arm64": {
+      "triple": "aarch64-pc-windows-msvc",
+      "sha256": "9690c472d1f5c9c57b5919512c64024dfff872d3e35be8f1892fe895a502b913"
+    }
+  }
+}

@@ -1,5 +1,11 @@
 # Install and launch
 
+## Windows checkout
+
+Clone the repository, then double-click **Open Job Finder.cmd**. You can also run **Open Job Finder.ps1** from PowerShell. The opener downloads a pinned, verified startup tool, then manages Python and the locked app dependencies under `%LOCALAPPDATA%\JobFinder`. You do not need a ZIP, Python, uv, Go, or administrator access.
+
+First setup needs internet and shows progress in the terminal. The browser opens when the app is ready. Keep the terminal open; use **Quit Job Finder** in the app to stop it. Opening the launcher again returns to the running app. After setup, cached launches work offline; job research still needs the network and a signed-in agent.
+
 ## Command and script preview
 
 Extract `Job-Finder-Script-Preview.zip`. On a Mac, double-click `Open Job Finder.command`. On Windows, double-click `Open Job Finder.cmd`; PowerShell users can run the `.ps1` file. On Linux, run `./Open\ Job\ Finder.sh`.
@@ -15,7 +21,7 @@ GOTOOLCHAIN=go1.27.3 python3 scripts/build_release.py --script-package
 GOTOOLCHAIN=go1.27.3 python3 scripts/build_release.py --script-package --reuse-images
 ```
 
-The output is `dist/Job-Finder-Script-Preview.zip` and its SHA-256 file. A fresh source clone needs this build step before its root scripts work; the distributed ZIP includes all required binaries.
+The output is `dist/Job-Finder-Script-Preview.zip` and its SHA-256 file. Mac and Linux source clones need this build step before their root scripts work. The Windows script handles an unbuilt checkout automatically. The distributed ZIP includes all required binaries.
 
 ## Native ZIP edition
 
@@ -46,7 +52,7 @@ Use **Quit** in the app to stop its local server. Closing a browser tab leaves i
 
 ## Source checkout
 
-The source workflow is documented in the main README. It is intended for developers and CLI users who already have Python or `uv`. It is separate from the no-tooling requirement for a built native ZIP.
+Windows clones use the opener described above. The manual source workflow in the main README is for developers and CLI users; it is optional on Windows.
 
 ## Data and recovery
 

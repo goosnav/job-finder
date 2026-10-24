@@ -8,7 +8,9 @@ A local app from Goosnav Labs that uses your signed-in **Codex** or **Claude Cod
 
 ## Open the app
 
-Extract the complete **Job-Finder-Script-Preview.zip**, then open the file for your computer:
+On Windows, clone this repository and double-click **Open Job Finder.cmd**, or run **Open Job Finder.ps1**. The opener downloads its private runtime automatically. No separate Python, uv, or ZIP installation is needed. First setup needs internet; later launches reuse the installed runtime.
+
+For the packaged app, extract the complete **Job-Finder-Script-Preview.zip**, then open the file for your computer:
 
 | Computer | Open |
 |---|---|
@@ -31,7 +33,7 @@ Use **Outreach** to prepare introductions after a report. The app opens your sea
 
 ### Develop from source
 
-A fresh source checkout does not contain generated supervisor or uv binaries. For development, install [uv](https://docs.astral.sh/uv/getting-started/installation/) and run:
+Windows checkouts use the opener above. For manual development, install [uv](https://docs.astral.sh/uv/getting-started/installation/) and run:
 
 ```sh
 uv run --project app --locked --no-dev python app/run.py gui
@@ -43,7 +45,7 @@ To build the self-contained script ZIP on a development host with the pinned Go 
 GOTOOLCHAIN=go1.27.3 python3 scripts/build_release.py --script-package
 ```
 
-This also prepares the binaries needed by this checkout's root launch scripts. For later application-only updates, use `--script-package --reuse-images`. Customers receive the built ZIP; they do not run the build command.
+This prepares the bundled supervisors for all root launch scripts. The Windows opener also works without this build step. Mac and Linux source checkouts need the build or the packaged ZIP. For later application-only updates, use `--script-package --reuse-images`.
 
 For live work, install and sign in to [Codex](https://developers.openai.com/codex/cli/) or [Claude Code](https://code.claude.com/docs/en/overview). Job Finder uses that CLI's authentication and checks its required capabilities. It does not store API keys. Your chosen provider receives the candidate material needed for its task; local storage does not mean offline AI processing.
 
