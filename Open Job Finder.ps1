@@ -1,6 +1,13 @@
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 
+function Get-StartupHash($path) {
+    $stream = [IO.File]::OpenRead($path)
+    $sha = [Security.Cryptography.SHA256]::Create()
+    try { return ([BitConverter]::ToString($sha.ComputeHash($stream))).Replace('-', '').ToLowerInvariant() }
+    finally { $sha.Dispose(); $stream.Dispose() }
+}
+
 function Open-RunningJobFinder($runtimeDirectory) {
     foreach ($name in @('current-instance.json', 'server.json')) {
         try {
@@ -66,7 +73,7 @@ try {
     $toolDirectory = Join-Path $dataRoot "tools/uv/$($bootstrap.uv)/windows-$architecture"
     New-Item -ItemType Directory -Force -Path $toolDirectory | Out-Null
     $tool = Join-Path $toolDirectory 'uv.exe'
-    if (-not (Test-Path -LiteralPath $tool) -or (Get-FileHash -LiteralPath $tool -Algorithm SHA256).Hash -ne $target.sha256) {
+    if (-not (Test-Path -LiteralPath $tool) -or (Get-StartupHash $tool) -ne $target.sha256) {
         $temporary = Join-Path $toolDirectory ([Guid]::NewGuid().ToString())
         New-Item -ItemType Directory -Path $temporary | Out-Null
         try {
@@ -84,14 +91,14 @@ try {
                 $candidate = Join-Path $temporary 'uv.exe'
                 [IO.Compression.ZipFileExtensions]::ExtractToFile($entries[0], $candidate)
             } finally { $zip.Dispose() }
-            if ((Get-FileHash -LiteralPath $candidate -Algorithm SHA256).Hash -ne $target.sha256) {
+            if ((Get-StartupHash $candidate) -ne $target.sha256) {
                 throw 'BOOT-INTEGRITY: Startup tool verification failed. No downloaded code was run.'
             }
             Move-Item -LiteralPath $candidate -Destination $tool -Force
         } finally { Remove-Item -LiteralPath $temporary -Recurse -Force }
     }
 
-    $hashes = @('pyproject.toml', 'uv.lock', '.python-version') | ForEach-Object { (Get-FileHash -LiteralPath (Join-Path $appRoot $_) -Algorithm SHA256).Hash }
+    $hashes = @('pyproject.toml', 'uv.lock', '.python-version') | ForEach-Object { Get-StartupHash (Join-Path $appRoot $_) }
     $sha = [Security.Cryptography.SHA256]::Create()
     try { $fingerprint = ([BitConverter]::ToString($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes(($hashes -join ':'))))).Replace('-', '').ToLowerInvariant() }
     finally { $sha.Dispose() }
