@@ -267,7 +267,7 @@ def run(
     outreach_provider: str | None = None, outreach_model: str | None = None,
     json_output: Json = False,
 ):
-    """Run pipeline, profile, discover, research, verify, or draft. Ctrl-C pauses safely."""
+    """Run report, pipeline, profile, discover, research, verify, or draft. Ctrl-C pauses safely."""
     service = Service()
     manager = Jobs(service)
     manager.recover_interrupted()

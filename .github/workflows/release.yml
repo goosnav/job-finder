@@ -24,6 +24,8 @@ jobs:
         run: go test ./...
       - name: Build and assemble the five images
         run: python scripts/build_release.py --prepare-tools --target all --package
+      - name: Build the command and script preview
+        run: python scripts/build_release.py --script-package
       - name: Record development build status
         run: |
           echo '## Native ZIP built' >> "$GITHUB_STEP_SUMMARY"
@@ -35,6 +37,8 @@ jobs:
           path: |
             dist/Job-Finder-M1a-unverified.zip
             dist/Job-Finder-M1a-unverified.zip.sha256
+            dist/Job-Finder-Script-Preview.zip
+            dist/Job-Finder-Script-Preview.zip.sha256
             build/images/launcher-hashes.json
           if-no-files-found: error
           compression-level: 0

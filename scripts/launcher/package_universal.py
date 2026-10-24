@@ -11,7 +11,6 @@ import stat
 import zipfile
 from pathlib import Path
 
-
 FORBIDDEN_PARTS = {"dev", "dev-private", ".git", ".github", "node_modules", ".venv", "logs", "__pycache__"}
 FORBIDDEN_NAMES = {"AGENTS.md", "CLAUDE.md", "CODEX.md", "GEMINI.md"}
 FORBIDDEN_SUFFIXES = {".db", ".key", ".log", ".p12", ".pem", ".pfx", ".sqlite", ".sqlite3"}
@@ -23,6 +22,23 @@ REQUIRED_TOOLS = (
     "launcher/tools/linux-x64/uv",
     "launcher/tools/linux-arm64/uv",
 )
+SCRIPT_LAUNCHERS = ("Open Job Finder.command", "Open Job Finder.cmd", "Open Job Finder.ps1", "Open Job Finder.sh")
+
+
+def validate_script_launchers(root: Path) -> None:
+    for name in SCRIPT_LAUNCHERS:
+        if not (root / name).is_file():
+            raise SystemExit(f"Missing script launcher: {name}")
+        if name.endswith((".sh", ".command")) and not (root / name).stat().st_mode & stat.S_IXUSR:
+            raise SystemExit(f"Script launcher is not executable: {name}")
+    for platform in ("macos", "windows", "linux"):
+        for architecture in ("x64", "arm64"):
+            name = "launcher.exe" if platform == "windows" else "launcher"
+            binary = root / "app/launcher/bin" / f"{platform}-{architecture}" / name
+            if binary.is_symlink() or not binary.is_file():
+                raise SystemExit(f"Missing or unsafe script supervisor: {platform}-{architecture}")
+            if platform != "windows" and not binary.stat().st_mode & stat.S_IXUSR:
+                raise SystemExit(f"Script supervisor is not executable: {platform}-{architecture}")
 
 
 def add_path(archive: zipfile.ZipFile, path: Path, relative: Path) -> None:
@@ -116,6 +132,7 @@ def main() -> int:
     parser.add_argument("--root", type=Path, required=True)
     parser.add_argument("--name", required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--scripts", action="store_true", help="Package the explicitly requested script preview, without claiming native M1a acceptance")
     args = parser.parse_args()
     if not args.root.is_dir():
         raise SystemExit(f"Release root is not a directory: {args.root}")
@@ -129,6 +146,9 @@ def main() -> int:
         "LICENSE.txt",
         "app",
     ]
+    if args.scripts:
+        expected = [*SCRIPT_LAUNCHERS, "README.txt", "LICENSE.txt", "app"]
+        validate_script_launchers(args.root)
     actual = sorted(path.name for path in args.root.iterdir() if not path.name.startswith("."))
     if sorted(expected) != actual:
         missing, extra = sorted(set(expected) - set(actual)), sorted(set(actual) - set(expected))
@@ -137,7 +157,7 @@ def main() -> int:
     validate_customer_document(args.root / "README.txt")
     validate_customer_document(args.root / "LICENSE.txt")
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    top = f"{args.name}-M1a"
+    top = f"{args.name}-Script-Preview" if args.scripts else f"{args.name}-M1a"
     temporary = args.output.with_name(args.output.name + ".partial")
     temporary.unlink(missing_ok=True)
     try:

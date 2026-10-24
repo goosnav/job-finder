@@ -78,3 +78,11 @@ Interrupted workers recover to paused state when their process is gone. Unreport
 The universal ZIP contains five launcher images, `README.txt`, `LICENSE.txt`, and `app/`. Mutable source, static assets, the lockfile, and launcher manifest remain under `app/`; source-only updates reuse stable launcher images. The Go supervisor opens a local setup page, bootstraps pinned Python/dependencies through bundled `uv`, waits for readiness, and redirects to the workspace. Runtime, database, logs, and caches live in the separate OS-specific `JobFinder` data directory.
 
 See [Install and launch](INSTALL.md) for build commands and platform limitations. The images are unsigned development builds. Linux AppImage setup, headless-browser workflow, instance reuse, Quit, and restart have been exercised; the complete native desktop and failure-recovery matrix is still unverified.
+
+## Report and script preview revision
+
+The GUI defaults to the shared `report` workflow: profile, discover, research, and verify. The existing `pipeline` workflow still includes draft. Report runs do not require the outreach provider. CSV preserves the detailed schema; Excel adds a first Report sheet for search parameters, ranked jobs, and application links. No database migration is required.
+
+The explicitly requested script preview uses `.command`, `.cmd`, `.ps1`, and `.sh` wrappers around the same Go supervisor. It bundles six compiled supervisors under `app/launcher/bin/` and uses the same runtime fingerprint, instance lock, readiness checks, browser status page, and external data directories as the native edition. The script ZIP has its own explicit packaging whitelist. It is a preview under M1a; it does not replace the native universal ZIP acceptance matrix.
+
+The compact GUI opens directly to the jobs table. Search selection uses a header dropdown. Jobs, Shortlist, Search settings, and Outreach are direct views. Report generation and CSV/Excel export stay above the table. The GUI has no sidebar, summary metrics, report prose, hero, or workflow-stage dropdown. A row star toggles new/shortlisted jobs only; other application states retain their progress. Completed runs clear the progress panel.

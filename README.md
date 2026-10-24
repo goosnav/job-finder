@@ -1,24 +1,46 @@
 # Job Finder
 
-**Turn a career objective into a ranked list of jobs, researched employers, and short outreach you can review.**
+**Generate a job report from your search parameters. Review the jobs, open the listings, and export CSV or Excel.**
 
-A local app from Goosnav Labs, built around your installed **Codex** or **Claude Code** CLI. Describe the work you want, optionally add a résumé, and run a bounded workflow. Open a direct application link or export reviewed outreach to your email tool. Choose the provider and model separately for profiling, discovery, research, and writing.
+A local app from Goosnav Labs, built around your installed **Codex** or **Claude Code** CLI. Describe the work you want, optionally add a résumé, and run a bounded workflow. Generate a report, compare the roles in the browser, save a shortlist, or open a direct application link. Outreach remains optional. Choose the provider and model separately for profiling, discovery, research, and writing.
 
 ![Ranked job opportunities in the Job Finder workspace](docs/screenshots/opportunities.png)
 
 *Fictional demo data. [Fit and evidence](docs/screenshots/opportunity-review.png) · [Outreach review](docs/screenshots/outreach.png) · [Mobile](docs/screenshots/mobile.png).*
 
-## Start
+## Open the app
 
-Install [uv](https://docs.astral.sh/uv/getting-started/installation/), then:
+Extract the complete **Job-Finder-Script-Preview.zip**, then open the file for your computer:
+
+| Computer | Open |
+|---|---|
+| Mac | Double-click `Open Job Finder.command` |
+| Windows | Double-click `Open Job Finder.cmd`, or run `Open Job Finder.ps1` |
+| Linux | Run `./Open\ Job\ Finder.sh` |
+
+Keep the launch files beside the complete `app/` folder. The default browser opens a setup page immediately, then your reports. Pinned Python and locked dependencies install automatically outside this folder. No Python, uv, Node.js, Go, or compiler installation is needed to use the packaged app. First setup needs internet. Keep the terminal open; use **Quit Job Finder** in the app to stop it.
+
+The script preview includes compiled supervisors for macOS, Windows, and Linux on x64 and ARM64. **macOS Apple Silicon launch is verified. The other targets are built but have not passed native acceptance for this revision.** Downloaded unsigned files can trigger OS trust prompts. [Installation and recovery](docs/INSTALL.md).
+
+Select **Load sample** for a fictional demonstration. For your own search, set the parameters and choose **Generate report**. The report workflow profiles, discovers, researches, and checks sources. It does not require an outreach model. Open **Jobs** to review jobs, save a shortlist, track progress, and open original listings. Use **CSV** or **Excel** above the results. Excel starts with a readable **Report** sheet, with the search brief and clickable job links; the detailed data and sources remain on separate sheets.
+
+Use **Outreach** to prepare introductions after a report. The shared CLI retains the original full `pipeline` workflow. Demo data stays clearly labeled and cannot enter actionable application or outreach exports.
+
+### Develop from source
+
+A fresh source checkout does not contain generated supervisor or uv binaries. For development, install [uv](https://docs.astral.sh/uv/getting-started/installation/) and run:
 
 ```sh
-git clone https://github.com/goosnav/job-finder.git
-cd job-finder
-uv run --project app --no-dev python app/run.py gui
+uv run --project app --locked --no-dev python app/run.py gui
 ```
 
-The app opens on a free local port. Select **Try the demo** to exercise the complete workflow without an agent account. Its five opportunities and all people are fictional; actionable application and outreach exports exclude demo data.
+To build the self-contained script ZIP on a development host with the pinned Go toolchain:
+
+```sh
+GOTOOLCHAIN=go1.27.3 python3 scripts/build_release.py --script-package
+```
+
+This also prepares the binaries needed by this checkout's root launch scripts. For later application-only updates, use `--script-package --reuse-images`. Customers receive the built ZIP; they do not run the build command.
 
 For live work, install and sign in to [Codex](https://developers.openai.com/codex/cli/) or [Claude Code](https://code.claude.com/docs/en/overview). Job Finder uses that CLI's authentication and checks its required capabilities. It does not store API keys. Your chosen provider receives the candidate material needed for its task; local storage does not mean offline AI processing.
 
@@ -32,7 +54,7 @@ An unsupported CLI version produces a setup instruction. A desktop launcher can 
 
 The repository includes a reproducible builder for one ZIP containing macOS universal, Windows x64/ARM64, and Linux x86_64/ARM64 launchers. A built ZIP provisions pinned Python and dependencies automatically. It still requires Codex or Claude for live research.
 
-All five launcher images have been built. Linux x86_64 passed a headless-browser smoke test through setup, the real GUI, a completed demo, second-launch reuse, restart persistence, and Quit. **Native desktop acceptance on macOS, Windows, and ARM remains unverified.** Images are unsigned development builds. [Installation, data locations, and building the ZIP](docs/INSTALL.md).
+The earlier native build recorded all five launcher images and a Linux x86_64 headless smoke. This revision verifies the macOS Apple Silicon script launcher separately. **The complete native image and failure matrix remains unverified; M1a stays ACTIVE.** Images are unsigned development builds. [Installation, data locations, and building the ZIP](docs/INSTALL.md).
 
 GitHub **Actions → Build native ZIP → Run workflow** creates a downloadable workflow artifact. It does not publish a release.
 
@@ -156,7 +178,7 @@ uv run --project app --no-dev python app/run.py schema search --json
 | `search list / show / configure` | Inspect searches or apply a JSON patch |
 | `resume-upload ID --file FILE` | Add résumé/supporting documents |
 | `import-opportunities ID FILE` | Import CSV/XLSX; imported live-status claims need verification |
-| `run ID --stage profile/discover/research/verify/draft/pipeline` | Execute an individual stage or full workflow |
+| `run ID --stage report/profile/discover/research/verify/draft/pipeline` | Execute a report, individual stage, or full workflow |
 | `runs list / show` | Progress, events, usage, failures |
 | `pause RUN_ID`, `resume RUN_ID`, `cancel RUN_ID` | Control durable work; Ctrl-C pauses |
 | `opportunities ID --json` | Ranked records with checks and export blockers |
@@ -184,7 +206,10 @@ Python/FastAPI, SQLite, and static HTML/CSS/JavaScript form the app. No frontend
 uv sync --project app --locked
 uv run --project app ruff check --config app/pyproject.toml app/src tests
 uv run --project app python -m pytest -c app/pyproject.toml tests
+uv run --project app python scripts/launcher/test_packaging.py
 ```
+
+For repeatable GUI checks, start the app with an isolated `JOB_FINDER_DATA` directory, then run `uv run --project app python scripts/smoke_gui.py --url http://127.0.0.1:PORT`. The check creates fictional searches and verifies reports, downloads, job links, tracking, and responsive layouts. See [GUI evidence](docs/GUI_QA.md).
 
 Tests cover real SQLite/API/CLI flows, ranking, model routes, resumability, call/cost budgets, subprocess contracts, direct-source parsers, source-fetch restrictions, document imports, and exports. Browser smoke checks use the actual GUI with fictional data. Live authenticated model relevance and drafting quality have not been benchmarked with a real résumé in this build. Run a small live search and review its evidence before scaling.
 

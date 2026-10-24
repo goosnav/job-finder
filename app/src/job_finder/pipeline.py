@@ -229,7 +229,7 @@ class Context:
                 completed=0,
                 total=total,
                 current_item="",
-                stage_index=STAGES.index(stage) + 1 if j["stage"] == "pipeline" else 1,
+                stage_index=STAGES.index(stage) + 1 if j["stage"] in {"pipeline", "report"} else 1,
             )
         )
         self.store.event(
@@ -540,6 +540,7 @@ class Jobs:
 
     def preflight(self, search: dict, stage: str):
         tasks = {
+            "report": ["profile", "discovery", "research"],
             "pipeline": ["profile", "discovery", "research", "outreach"],
             "profile": ["profile"],
             "discover": ["discovery"],
@@ -563,7 +564,7 @@ class Jobs:
         RunRequest(stage=stage)
         search = self.store.get("searches", search_id)
         self.service.assert_idle(search_id)
-        if stage in {"pipeline", "profile", "discover", "research"} and not (
+        if stage in {"report", "pipeline", "profile", "discover", "research"} and not (
             search["objective"]
             or search["preferences"]["roles"]
             or search["candidate"]["resume_text"]
@@ -585,7 +586,7 @@ class Jobs:
             "completed": 0,
             "total": 0,
             "stage_index": 0,
-            "stage_count": len(STAGES) if stage == "pipeline" else 1,
+            "stage_count": len(STAGES) if stage == "pipeline" else len(STAGES) - 1 if stage == "report" else 1,
             "agent_calls": 0,
             "max_agent_calls": search["settings"]["max_agent_calls"],
             "input_tokens": None,
@@ -772,7 +773,7 @@ class Jobs:
         try:
             if job.get("requested_action") in {"pause", "cancel"}:
                 context.halt("paused" if job["requested_action"] == "pause" else "cancelled")
-            stages = STAGES if job["stage"] == "pipeline" else [job["stage"]]
+            stages = STAGES if job["stage"] == "pipeline" else STAGES[:-1] if job["stage"] == "report" else [job["stage"]]
             for stage in stages:
                 context.check()
                 if stage == "profile":

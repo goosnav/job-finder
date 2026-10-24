@@ -915,6 +915,37 @@ def test_demo_pipeline_stays_offline_with_five_stages(tmp_path, monkeypatch):
     assert any(len(row["drafts"]) == 3 for row in service.store.list("opportunities"))
 
 
+def test_report_uses_shared_stages_and_omits_outreach(tmp_path, monkeypatch):
+    monkeypatch.setattr(pipeline, "AgentRunner", lambda *args, **kwargs: pytest.fail("No real agent for demo"))
+    monkeypatch.setattr(pipeline, "fetch_public_text", lambda *args, **kwargs: pytest.fail("No web request for demo"))
+    service = Service(tmp_path)
+    search = service.create_demo()
+    manager = Jobs(service)
+    run = manager.create(search["id"], "report", background=False)
+    assert run["status"] == "completed"
+    assert run["stage_index"] == run["stage_count"] == 4
+    assert run["current_stage"] == "verify"
+    detail = service.search_detail(search["id"])
+    assert detail["opportunities"]
+    assert all(row["research_status"] == "complete" and not row["drafts"] for row in detail["opportunities"])
+    assert service.export(search["id"], "csv").startswith(b"\xef\xbb\xbf")
+    draft = manager.create(search["id"], "draft", background=False)
+    assert draft["status"] == "completed"
+    assert any(row["drafts"] for row in service.search_detail(search["id"])["opportunities"])
+
+
+def test_report_preflight_does_not_require_outreach_provider(tmp_path, monkeypatch):
+    monkeypatch.setattr(pipeline, "inspect_providers", lambda: [{"id": "codex", "available": True}])
+    service = Service(tmp_path)
+    search = service.create_search({"name": "Report", "objective": "Engineering", "settings": {
+        "provider": "codex", "routes": {"outreach": {"provider": "claude"}},
+    }})
+    manager = Jobs(service)
+    manager.preflight(search, "report")
+    with pytest.raises(pipeline.AppError, match="Set up claude"):
+        manager.preflight(search, "pipeline")
+
+
 def test_live_old_posting_and_today_deadline_are_not_expired():
     from datetime import UTC, datetime, timedelta
 

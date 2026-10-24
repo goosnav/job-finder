@@ -15,7 +15,7 @@ Fetch `GET /api/session` from the same origin. Keep its token in memory and send
 | POST | `/api/searches/{id}/import` | Multipart CSV/XLSX opportunity import |
 | POST | `/api/searches/{id}/verification/import` | Multipart `file` plus optional verifier `source` |
 | POST | `/api/searches/{id}/outcomes/import` | Multipart application/contact tracking CSV |
-| POST | `/api/searches/{id}/runs` | `{ "stage": "pipeline" }` or an individual stage; returns `{run}` |
+| POST | `/api/searches/{id}/runs` | `{ "stage": "report" }`, `pipeline`, or an individual stage; returns `{run}` |
 | GET | `/api/runs/{id}` | `{run, events}`: durable progress and recent events |
 | POST | `/api/runs/{id}/pause` | Stop active calls and save state; returns `{run}` |
 | POST | `/api/runs/{id}/resume` | Continue with retained counters and valid caches |
@@ -101,7 +101,7 @@ application/outreach exports.
 
 ## Runs, budgets, and errors
 
-Stages are `pipeline`, `profile`, `discover`, `research`, `verify`, and `draft`.
+Stages are `report`, `pipeline`, `profile`, `discover`, `research`, `verify`, and `draft`. `report` runs profile, discovery, research, and verification. `pipeline` adds outreach drafting.
 Run states are `queued`, `running`, `paused`, `completed`, `failed`,
 `budget_exhausted`, and `cancelled`. `completed`/`total` describe the **current
 stage**, not a global ETA. `stage_index`/`stage_count` show pipeline position.

@@ -229,7 +229,12 @@ def test_spreadsheet_contains_ranked_job_links_sources_and_complete_email(servic
     assert row['email_1_body'].endswith('Alex Example\nalex@example.invalid')
     assert row['score_breakdown'] and row['evidence'] and row['opportunity_id']
     book = load_workbook(io.BytesIO(service.export(search['id'], 'xlsx')))
-    assert book.sheetnames == ['Opportunities','Sources','Read me']
+    assert book.sheetnames == ['Report','Opportunities','Sources','Read me']
+    assert book['Report']['B2'].value == search['name']
+    assert book['Report']['B3'].value == search['objective']
+    assert book['Report']['B12'].value == opportunity['title']
+    assert book['Report']['H12'].hyperlink.target == opportunity['apply_url']
+    assert book['Report'].auto_filter.ref == 'A11:H12'
     assert book['Opportunities'].freeze_panes == 'H2'
 
 

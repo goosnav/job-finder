@@ -301,7 +301,7 @@ class Opportunity(ResearchResult):
 
 
 class RunRequest(Model):
-    stage: Literal["pipeline", "profile", "discover", "research", "verify", "draft"] = "pipeline"
+    stage: Literal["report", "pipeline", "profile", "discover", "research", "verify", "draft"] = "pipeline"
 
 
 class SuppressionInput(Model):

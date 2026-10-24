@@ -78,4 +78,9 @@ temp/
 /app/launcher/tools/
 /app/launcher/checksums.sha256
 /Open Job Finder*
+!/Open Job Finder.command
+!/Open Job Finder.ps1
+!/Open Job Finder.cmd
+!/Open Job Finder.sh
+/app/launcher/bin/
 *.syso

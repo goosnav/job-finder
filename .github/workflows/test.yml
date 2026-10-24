@@ -23,4 +23,5 @@ jobs:
       - run: uv sync --project app --locked
       - run: uv run --project app ruff check --config app/pyproject.toml app/src tests
       - run: uv run --project app python -m pytest -c app/pyproject.toml tests
+      - run: uv run --project app python scripts/launcher/test_packaging.py
       - run: uv run --project app python app/run.py --help

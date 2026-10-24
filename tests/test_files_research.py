@@ -10,11 +10,12 @@ import pytest
 from job_finder import research
 from job_finder.config import AppError
 from job_finder.files import read_rows, safe_cell, spreadsheet
+from job_finder.models import SearchInput
 from openpyxl import load_workbook
 
 
 def test_all_xlsx_cells_escape_formula_payloads():
-    search = {
+    search = SearchInput.model_validate({
         "name": '=HYPERLINK("https://example.invalid", "click")',
         "demo": False,
         "candidate": {
@@ -22,10 +23,14 @@ def test_all_xlsx_cells_escape_formula_payloads():
                         "email": "x@example.com",
             "links": [],
         },
-    }
+        "objective": "=SUM(1)",
+        "preferences": {"roles": ["=SUM(2)"]},
+    }).model_dump()
     book = load_workbook(io.BytesIO(spreadsheet(search, [], "xlsx")), data_only=False)
     assert book["Read me"]["B1"].data_type == "s"
     assert book["Read me"]["B1"].value.startswith("'=")
+    assert book["Report"]["B3"].value.startswith("'=")
+    assert book["Report"]["B4"].value.startswith("'=")
     assert not any(
         cell.data_type == "f" for sheet in book for row in sheet for cell in row
     )

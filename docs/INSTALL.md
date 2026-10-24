@@ -1,5 +1,22 @@
 # Install and launch
 
+## Command and script preview
+
+Extract `Job-Finder-Script-Preview.zip`. On a Mac, double-click `Open Job Finder.command`. On Windows, double-click `Open Job Finder.cmd`; PowerShell users can run the `.ps1` file. On Linux, run `./Open\ Job\ Finder.sh`.
+
+The scripts resolve their adjacent `app/` folder and invoke the existing Go supervisor. They do not install development tools or run a separate application workflow. The preview bundles all six supervisors and pinned uv executables. The supervisor opens setup in the browser, downloads managed Python and locked production dependencies, and opens the real app. Keep the terminal open until you quit the app.
+
+The macOS Apple Silicon script launch passed native browser verification with a PATH containing no Python, uv, or Go. Windows, Linux, and macOS Intel supervisors are compiled but need native verification. The preview is unsigned and does not advance M1a acceptance.
+
+Build and update on a development host:
+
+```sh
+GOTOOLCHAIN=go1.27.3 python3 scripts/build_release.py --script-package
+GOTOOLCHAIN=go1.27.3 python3 scripts/build_release.py --script-package --reuse-images
+```
+
+The output is `dist/Job-Finder-Script-Preview.zip` and its SHA-256 file. A fresh source clone needs this build step before its root scripts work; the distributed ZIP includes all required binaries.
+
 ## Native ZIP edition
 
 The release builder produces one ZIP with five launcher images and a shared `app/` directory. This repository's initial build is an **unsigned development build**. Cross-compilation does not establish native desktop acceptance. See the verification status in the main README before relying on a platform.

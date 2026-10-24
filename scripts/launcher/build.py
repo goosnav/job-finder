@@ -12,7 +12,6 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parent
 SUPERVISOR = ROOT / "supervisor"
 
@@ -153,7 +152,7 @@ def build_linux(name: str, arch: str, icons: Path, output: Path, appimagetool: s
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--target", required=True, choices=("macos", "windows-x64", "windows-arm64", "linux-x64", "linux-arm64"))
+    parser.add_argument("--target", required=True, choices=("scripts", "macos", "windows-x64", "windows-arm64", "linux-x64", "linux-arm64"))
     parser.add_argument("--name", required=True)
     parser.add_argument("--bundle-id", required=True)
     parser.add_argument("--icons", type=Path, required=True, help="Directory containing AppIcon.icns, AppIcon.ico, and AppIcon.png")
@@ -165,7 +164,17 @@ def main() -> int:
     args.output.mkdir(parents=True, exist_ok=True)
     if not args.name.strip() or any(character in args.name for character in "/\\\0"):
         parser.error("--name must be a safe display name")
-    if args.target == "macos":
+    if args.target == "scripts":
+        with tempfile.TemporaryDirectory() as temp:
+            work = Path(temp) / "supervisor"
+            copy_supervisor(work)
+            for platform, goos in (("macos", "darwin"), ("windows", "windows"), ("linux", "linux")):
+                for architecture, goarch in (("x64", "amd64"), ("arm64", "arm64")):
+                    binary = args.output / f"{platform}-{architecture}" / ("launcher.exe" if goos == "windows" else "launcher")
+                    binary.parent.mkdir(parents=True, exist_ok=True)
+                    go_build(work, goos, goarch, binary, windows_gui=goos == "windows")
+                    binary.chmod(0o755)
+    elif args.target == "macos":
         build_macos(args.name, args.bundle_id, args.icons, args.output)
     elif args.target == "windows-x64":
         build_windows(args.name, "amd64", args.icons, args.output, args.windows_resource)

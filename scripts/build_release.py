@@ -17,7 +17,6 @@ import sys
 import urllib.request
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[1]
 LAUNCHER = ROOT / "scripts" / "launcher"
 PINS = json.loads((LAUNCHER / "tool-versions.json").read_text("utf-8"))
@@ -141,6 +140,7 @@ def main() -> int:
     parser.add_argument("--prepare-tools", action="store_true", help="Download pinned build tools (requires Go on build host)")
     parser.add_argument("--reuse-images", action="store_true", help="Reuse the stable existing images; only repackage app payload")
     parser.add_argument("--package", action="store_true", help="Assemble universal ZIP; requires all five images")
+    parser.add_argument("--script-package", action="store_true", help="Build the requested command/PowerShell/shell preview with the same supervisor")
     parser.add_argument("--tools", type=Path, default=ROOT / "build" / "tooling")
     parser.add_argument("--images", type=Path, default=ROOT / "build" / "images")
     parser.add_argument("--output", type=Path, default=ROOT / "dist" / "Job-Finder-M1a-unverified.zip")
@@ -151,6 +151,33 @@ def main() -> int:
     args.images.mkdir(parents=True, exist_ok=True)
     if args.prepare_tools:
         prepare_tools(args.tools)
+    if args.script_package:
+        binaries = ROOT / "app/launcher/bin"
+        if not args.reuse_images:
+            version = subprocess.check_output(["go", "version"], text=True, timeout=15).split()
+            if len(version) < 3 or version[2] != f"go{PINS['go']}":
+                raise SystemExit(f"Use pinned Go {PINS['go']} to preserve stable supervisor hashes.")
+            run(sys.executable, LAUNCHER / "build.py", "--target", "scripts", "--name", "Job Finder",
+                "--bundle-id", "com.goosnav.job-finder", "--icons", LAUNCHER / "icons", "--output", binaries)
+        if not (ROOT / "app/launcher/checksums.sha256").is_file():
+            run(sys.executable, LAUNCHER / "fetch_uv.py", "--version", PINS["uv"], "--app-root", ROOT / "app")
+        staging = ROOT / "build/script-release"
+        if staging.exists():
+            shutil.rmtree(staging)
+        # The script edition uses the same app whitelist and no visible native images.
+        empty_images = ROOT / "build/script-images"
+        empty_images.mkdir(parents=True, exist_ok=True)
+        stage_payload(staging, empty_images)
+        for name in ("Open Job Finder.command", "Open Job Finder.cmd", "Open Job Finder.ps1", "Open Job Finder.sh"):
+            shutil.copy2(ROOT / name, staging / name)
+        shutil.copy2(LAUNCHER / "README-scripts.txt", staging / "README.txt")
+        output = args.output if args.output != parser.get_default("output") else ROOT / "dist/Job-Finder-Script-Preview.zip"
+        run(sys.executable, LAUNCHER / "package_universal.py", "--scripts", "--root", staging,
+            "--name", "Job Finder", "--output", output.resolve())
+        digest = hashlib.sha256(output.read_bytes()).hexdigest()
+        output.with_suffix(output.suffix + ".sha256").write_text(f"{digest}  {output.name}\n", "utf-8")
+        print(f"Built {output}; only native-tested platforms may be claimed as verified.")
+        return 0
     if not args.reuse_images:
         for target in TARGETS if args.target == "all" else [args.target]:
             build_target(target, args.tools, args.images)

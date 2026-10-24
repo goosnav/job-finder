@@ -203,8 +203,45 @@ def spreadsheet(search: dict, opportunities: list[dict], format: str) -> bytes:
     if format != "xlsx":
         raise AppError("EXPORT-FORMAT", "Choose CSV or XLSX.")
     book = Workbook()
-    sheet = book.active
-    sheet.title = "Opportunities"
+    summary = book.active
+    summary.title = "Report"
+    preferences = search["preferences"]
+    for row in [
+        ["JOB FINDER", "Goosnav Labs"],
+        ["Search", search["name"]],
+        ["Objective", search["objective"]],
+        ["Target roles", "; ".join(preferences["roles"]) or "Not specified"],
+        ["Locations", "; ".join(preferences["locations"]) or "Not specified"],
+        ["Work modes", "; ".join(preferences["work_modes"]) or "Not specified"],
+        ["Minimum annual salary", f"{preferences['salary_currency']} {preferences['salary_min']:,.0f}" if preferences["salary_min"] is not None else "Not specified"],
+        ["Rows in this report", len(opportunities)],
+        ["Data", "FICTIONAL DEMO" if search["demo"] else "Review source dates and unresolved requirements before applying."],
+    ]:
+        summary.append([safe_cell(value) for value in row])
+    summary.append([])
+    summary.append(["Rank", "Role", "Company", "Location", "Fit / 100", "Listing status", "Progress", "Job link"])
+    for opportunity in opportunities:
+        summary.append([safe_cell(value) for value in (
+            opportunity.get("rank", ""), opportunity.get("title", ""), opportunity["company"],
+            opportunity.get("location", ""), opportunity.get("fit_score", ""),
+            opportunity.get("listing_status", "unverified"), opportunity.get("application_status", "new"),
+            opportunity.get("apply_url") or opportunity.get("listing_url") or opportunity.get("careers_url", ""),
+        )])
+    summary.freeze_panes = "D12"
+    summary.auto_filter.ref = f"A11:H{max(11, summary.max_row)}"
+    for column, width in {"A": 24, "B": 48, "C": 30, "D": 30, "E": 15, "F": 20, "G": 20, "H": 60}.items():
+        summary.column_dimensions[column].width = width
+    for row in summary:
+        for cell in row:
+            cell.alignment = Alignment(vertical="top", wrap_text=True)
+            if cell.row in {1, 11}:
+                cell.fill = PatternFill("solid", fgColor="1746C7")
+                cell.font = Font(color="FFFFFF", bold=True)
+    for cell in list(summary.columns)[7][11:]:
+        if str(cell.value or "").startswith(("https://", "http://")):
+            cell.hyperlink = cell.value
+            cell.style = "Hyperlink"
+    sheet = book.create_sheet("Opportunities")
     sheet.append(EXPORT_COLUMNS)
     for row in rows:
         sheet.append([safe_cell(row.get(key, "")) for key in EXPORT_COLUMNS])

@@ -20,6 +20,29 @@ package = load_module("package_universal")
 
 
 class ReleaseBoundaryTests(unittest.TestCase):
+    def test_script_preview_requires_every_supervisor_and_executable_script(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for name in package.SCRIPT_LAUNCHERS:
+                script = root / name
+                script.write_text("launcher")
+                script.chmod(0o755)
+            for platform in ("macos", "windows", "linux"):
+                for architecture in ("x64", "arm64"):
+                    name = "launcher.exe" if platform == "windows" else "launcher"
+                    binary = root / "app/launcher/bin" / f"{platform}-{architecture}" / name
+                    binary.parent.mkdir(parents=True, exist_ok=True)
+                    binary.write_bytes(b"supervisor")
+                    binary.chmod(0o755)
+            package.validate_script_launchers(root)
+            (root / "Open Job Finder.command").chmod(0o644)
+            with self.assertRaisesRegex(SystemExit, "not executable"):
+                package.validate_script_launchers(root)
+            (root / "Open Job Finder.command").chmod(0o755)
+            (root / "app/launcher/bin/windows-arm64/launcher.exe").unlink()
+            with self.assertRaisesRegex(SystemExit, "windows-arm64"):
+                package.validate_script_launchers(root)
+
     @staticmethod
     def valid_payload(root):
         (root / "launcher").mkdir(parents=True)
