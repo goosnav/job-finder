@@ -27,7 +27,8 @@ def request(url, path, body=None, token=None):
 def run():
     if sys.platform != 'win32':
         raise SystemExit('Run this smoke check on Windows.')
-    with tempfile.TemporaryDirectory(prefix='job-finder-windows-') as temporary:
+    # The default Windows browser can retain its temporary profile until it exits.
+    with tempfile.TemporaryDirectory(prefix='job-finder-windows-', ignore_cleanup_errors=True) as temporary:
         base = Path(temporary)
         clone = base / 'Job Finder Δ clone'
         clone.mkdir()
