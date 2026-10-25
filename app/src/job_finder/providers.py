@@ -176,13 +176,22 @@ def _resolve_executable(provider: str, executable: str | None = None) -> list[st
                     architectures.reverse()
                 for arch, triple in architectures:
                     if provider == "codex":
+                        main_package = node_modules / "@openai/codex"
+                        vendors = [
+                            main_package / "vendor",
+                            node_modules / f"@openai/codex-win32-{arch}/vendor",
+                            main_package / f"node_modules/@openai/codex-win32-{arch}/vendor",
+                        ]
                         candidates += [
-                            node_modules / package / "vendor" / triple / folder / "codex.exe"
-                            for package in ("@openai/codex", f"@openai/codex-win32-{arch}")
+                            vendor / triple / folder / "codex.exe"
+                            for vendor in vendors
                             for folder in ("bin", "codex")
                         ]
                     else:
-                        candidates.append(node_modules / f"@anthropic-ai/claude-code-win32-{arch}/claude.exe")
+                        candidates += [
+                            modules / f"@anthropic-ai/claude-code-win32-{arch}/claude.exe"
+                            for modules in (node_modules, node_modules / "@anthropic-ai/claude-code/node_modules")
+                        ]
                 if provider == "claude":
                     candidates.append(node_modules / "@anthropic-ai/claude-code/bin/claude.exe")
     for candidate in candidates:

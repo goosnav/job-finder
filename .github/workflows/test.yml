@@ -33,7 +33,7 @@ jobs:
         name: Check real Windows agent discovery and options without sign-in
         shell: pwsh
         run: uv run --project app python scripts/smoke_windows_installed_agents.py --prefix "$env:RUNNER_TEMP\Job Finder Agent Contracts"
-      - if: runner.os == 'Windows'
+      - if: ${{ !cancelled() && runner.os == 'Windows' }}
         run: uv run --project app python scripts/smoke_windows_launcher.py
       - if: runner.os == 'Linux'
         run: uv run --project app playwright install --with-deps chromium

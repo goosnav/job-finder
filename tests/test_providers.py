@@ -248,7 +248,8 @@ def test_windows_git_bash_discovery_uses_git_install_instead_of_other_bash(tmp_p
 
 
 @pytest.mark.parametrize("binary_folder", ["codex", "bin"])
-def test_windows_codex_native_package_prefers_the_os_architecture(binary_folder, tmp_path, monkeypatch):
+@pytest.mark.parametrize("layout", ["hoisted", "nested"])
+def test_windows_codex_native_package_prefers_the_os_architecture(binary_folder, layout, tmp_path, monkeypatch):
     monkeypatch.setattr(providers.sys, "platform", "win32")
     monkeypatch.setattr(providers, "_install_directories", lambda: [tmp_path])
     monkeypatch.setattr(providers.shutil, "which", lambda value: None)
@@ -257,14 +258,17 @@ def test_windows_codex_native_package_prefers_the_os_architecture(binary_folder,
     monkeypatch.setenv("PROCESSOR_ARCHITECTURE", "AMD64")
     binaries = []
     for arch, triple in (("x64", "x86_64-pc-windows-msvc"), ("arm64", "aarch64-pc-windows-msvc")):
-        binary = tmp_path / "node_modules" / f"@openai/codex-win32-{arch}" / "vendor" / triple / binary_folder / "codex.exe"
+        modules = tmp_path / "node_modules"
+        if layout == "nested":
+            modules = modules / "@openai/codex/node_modules"
+        binary = modules / f"@openai/codex-win32-{arch}" / "vendor" / triple / binary_folder / "codex.exe"
         binary.parent.mkdir(parents=True)
         binary.touch()
         binaries.append(binary)
     assert providers._resolve_executable("codex") == [str(binaries[1])]
 
 
-@pytest.mark.parametrize("layout", ["npm-bin", "npm-platform"])
+@pytest.mark.parametrize("layout", ["npm-bin", "npm-platform", "npm-platform-nested"])
 def test_windows_claude_current_native_npm_install_is_discovered(layout, tmp_path, monkeypatch):
     monkeypatch.setattr(providers.sys, "platform", "win32")
     monkeypatch.setattr(providers, "_install_directories", lambda: [tmp_path])
@@ -272,7 +276,11 @@ def test_windows_claude_current_native_npm_install_is_discovered(layout, tmp_pat
     monkeypatch.delenv("JOB_FINDER_CLAUDE_BIN", raising=False)
     monkeypatch.setenv("PROCESSOR_ARCHITECTURE", "AMD64")
     monkeypatch.delenv("PROCESSOR_ARCHITEW6432", raising=False)
-    suffix = "@anthropic-ai/claude-code/bin/claude.exe" if layout == "npm-bin" else "@anthropic-ai/claude-code-win32-x64/claude.exe"
+    suffix = {
+        "npm-bin": "@anthropic-ai/claude-code/bin/claude.exe",
+        "npm-platform": "@anthropic-ai/claude-code-win32-x64/claude.exe",
+        "npm-platform-nested": "@anthropic-ai/claude-code/node_modules/@anthropic-ai/claude-code-win32-x64/claude.exe",
+    }[layout]
     binary = tmp_path / "node_modules" / suffix
     binary.parent.mkdir(parents=True)
     binary.touch()
