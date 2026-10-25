@@ -47,7 +47,7 @@ The script also fails on uncaught JavaScript errors and unexpected HTTP errors. 
 
 The production GUI check and both-provider consent/recovery check passed. These include duplicate-submission prevention, preserved inputs, retry, and actual shutdown. An independent repeat of the main workflow also passed.
 
-The unit suite passed 278 tests with one existing warning. Ruff and packaging checks passed. Transport fixtures now run on Windows as well as macOS and Linux, including cancellation of child processes.
+The unit suite passed 279 tests with one existing warning. Ruff and packaging checks passed. Transport fixtures now run on Windows as well as macOS and Linux, including cancellation of child processes.
 
 On 2026-10-24, Codex 0.163.0 and Claude Code 2.1.283 each fetched `https://example.com` through the actual adapter on Linux and returned the page title. Claude reported USD 0.299599. Both used the installed CLI sign-in and inherited configuration. These checks do not establish signed-in Windows model execution.
 

@@ -59,6 +59,8 @@ def _install_directories() -> list[Path]:
         ("ProgramFiles(x86)", "nodejs"),
         ("ProgramFiles", "Git/bin"),
         ("ProgramFiles", "Git/cmd"),
+        ("ProgramFiles(x86)", "Git/bin"),
+        ("ProgramFiles(x86)", "Git/cmd"),
         ("LOCALAPPDATA", "Programs/Git/bin"),
         ("SystemRoot", "System32"),
         ("SystemRoot", "System32/WindowsPowerShell/v1.0"),
@@ -111,8 +113,17 @@ def _agent_environment(command: list[str]) -> dict[str, str]:
     environment["PATH"] = os.pathsep.join(paths)
     if not environment.get("CLAUDE_CODE_GIT_BASH_PATH"):
         for directory in directories:
-            bash = directory / "bash.exe"
-            if bash.is_file():
+            # Registry PATH usually contains Git/cmd. Git Bash lives in Git/bin.
+            # Do not select System32/bash.exe (WSL) as a Git Bash installation.
+            bash = next(
+                (
+                    path
+                    for path in (directory / "bash.exe", directory.parent / "bin/bash.exe")
+                    if path.is_file() and (path.parent / "git.exe").is_file()
+                ),
+                None,
+            )
+            if bash:
                 environment["CLAUDE_CODE_GIT_BASH_PATH"] = str(bash)
                 break
     return environment

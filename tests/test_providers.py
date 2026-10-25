@@ -232,6 +232,21 @@ def test_windows_children_receive_recovered_tool_path_without_changing_parent(tm
     assert dict(os.environ) == before
 
 
+def test_windows_git_bash_discovery_uses_git_install_instead_of_other_bash(tmp_path, monkeypatch):
+    system = tmp_path / "System32"
+    git = tmp_path / "Custom Git"
+    for directory in (system, git / "bin", git / "cmd"):
+        directory.mkdir(parents=True)
+    (system / "bash.exe").touch()  # A WSL/other bash launcher is not Git Bash.
+    (git / "bin/bash.exe").touch()
+    (git / "bin/git.exe").touch()
+    monkeypatch.setattr(providers.sys, "platform", "win32")
+    monkeypatch.setattr(providers, "_install_directories", lambda: [system, git / "cmd"])
+    monkeypatch.delenv("CLAUDE_CODE_GIT_BASH_PATH", raising=False)
+    environment = providers._agent_environment([sys.executable])
+    assert environment["CLAUDE_CODE_GIT_BASH_PATH"] == str(git / "bin/bash.exe")
+
+
 def test_windows_codex_native_package_prefers_the_os_architecture(tmp_path, monkeypatch):
     monkeypatch.setattr(providers.sys, "platform", "win32")
     monkeypatch.setattr(providers, "_install_directories", lambda: [tmp_path])

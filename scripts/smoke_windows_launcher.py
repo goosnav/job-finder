@@ -57,13 +57,16 @@ def run():
         env['USERPROFILE'] = str(base / 'home')
         fixture = r'''const fs=require('fs');
 const cp=require('child_process');
+process.on('uncaughtException',e=>{fs.appendFileSync(process.env.TEST_AGENT_LOG+'.errors',e.message+'\n');process.exit(1);});
 const args=process.argv.slice(2);
 if(args.includes('--version')) {console.log('1.0.0');process.exit(0);}
 const prompt=fs.readFileSync(0,'utf8');
 if(!prompt.includes('QA jobs near Δ')) {throw new Error('stdin UTF-8 transport failed');}
 const bypass=args[0]==='exec'?'--dangerously-bypass-approvals-and-sandbox':'--dangerously-skip-permissions';
 if(!args.includes(bypass)) {throw new Error('permission bypass missing');}
-if(args[0]==='exec' && !args.includes('web_search="live"')) {throw new Error('live web search missing');}
+const schema=args[0]==='exec'?JSON.parse(fs.readFileSync(args[args.indexOf('--output-schema')+1],'utf8')):JSON.parse(args[args.indexOf('--json-schema')+1]);
+const discovery=!!schema.properties.opportunities;
+if(discovery && args[0]==='exec' && !args.includes('web_search="live"')) {throw new Error('live web search missing');}
 if(args[0]!=='exec' && JSON.parse(args[args.indexOf('--settings')+1]).sandbox.enabled!==false) {throw new Error('shell sandbox still enabled');}
 // Start a tool by name from the recovered PATH and make an actual HTTPS request.
 const probe=cp.spawnSync('node',['-e',`
@@ -74,14 +77,15 @@ console.log('public-https-ok');});
 }).on('error',()=>process.exit(3)).setTimeout(15000,function(){this.destroy();});
 `],{encoding:'utf8',timeout:20000,windowsHide:true});
 if(probe.error || probe.status!==0 || !probe.stdout.includes('public-https-ok')) {
- console.error('Network tool failed: '+(probe.error?.code || probe.stderr));process.exit(1);
+ throw new Error('Network tool failed: '+(probe.error?.code || probe.status+' '+probe.stderr));
 }
 const profile={summary:'Fictional Windows integration profile',suggested_roles:['QA Engineer'],search_terms:['QA engineer jobs'],strengths:['Testing'],gaps:[],unknowns:[]};
+const result=discovery?{opportunities:[],coverage_notes:'Fixture child tool verified public HTTPS'}:profile;
 fs.appendFileSync(process.env.TEST_AGENT_LOG,JSON.stringify(args)+'\n');
 if(args[0]==='exec') {
- fs.writeFileSync(args[args.indexOf('--output-last-message')+1],JSON.stringify(profile));
+ fs.writeFileSync(args[args.indexOf('--output-last-message')+1],JSON.stringify(result));
  console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:1,output_tokens:1}}));
-} else console.log(JSON.stringify({type:'result',subtype:'success',structured_output:profile,usage:{input_tokens:1,output_tokens:1},total_cost_usd:0}));
+} else console.log(JSON.stringify({type:'result',subtype:'success',structured_output:result,usage:{input_tokens:1,output_tokens:1},total_cost_usd:0}));
 '''
         for provider, entry in [('codex','@openai/codex/bin/codex.js'),('claude','@anthropic-ai/claude-code/cli.js')]:
             for suffix in ('', '.cmd', '.ps1'):
@@ -123,7 +127,7 @@ if(args[0]==='exec') {
                     if not attempt:
                         saved = request(url, '/api/searches', {'name': 'Windows launch persistence'}, session['token'])
                         for provider in ('codex', 'claude'):
-                            search = request(url, '/api/searches', {'name': provider+' npm integration', 'objective':'Find QA jobs near Δ', 'settings':{'provider':provider}}, session['token'])
+                            search = request(url, '/api/searches', {'name': provider+' npm integration', 'objective':'Find QA jobs near Δ', 'settings':{'provider':provider,'discovery_queries':1,'target_results':1}}, session['token'])
                             path = '/api/searches/'+search['id']
                             try:
                                 request(url, path+'/runs', {'stage':'profile'}, session['token'])
@@ -133,17 +137,20 @@ if(args[0]==='exec') {
                             req = urllib.request.Request(url+path, data=b'{"settings":{"agent_tools_approved":true}}', headers={'Content-Type':'application/json','X-Session-Token':session['token']}, method='PATCH')
                             with urllib.request.urlopen(req,timeout=5):
                                 pass
-                            job = request(url, path+'/runs', {'stage':'profile'}, session['token'])['run']
-                            for _ in range(300):
-                                run = request(url,'/api/runs/'+job['id'])['run']
-                                if run['status'] not in ('queued','running'):
-                                    break
-                                time.sleep(.1)
-                            assert run['status']=='completed',run
+                            for stage in ('profile', 'discover'):
+                                job = request(url, path+'/runs', {'stage':stage}, session['token'])['run']
+                                for _ in range(300):
+                                    run = request(url,'/api/runs/'+job['id'])['run']
+                                    if run['status'] not in ('queued','running'):
+                                        break
+                                    time.sleep(.1)
+                                diagnostic = Path(env['TEST_AGENT_LOG']+'.errors')
+                                assert run['status']=='completed',(run, diagnostic.read_text() if diagnostic.exists() else '')
                             assert request(url,path)['search']['profile']['summary']=='Fictional Windows integration profile'
                         calls = [json.loads(line) for line in (base/'agent-calls.jsonl').read_text().splitlines()]
                         assert any('--dangerously-bypass-approvals-and-sandbox' in args for args in calls)
                         assert any('--dangerously-skip-permissions' in args for args in calls)
+                        assert any('web_search="live"' in args for args in calls)
 
                         # A second opener must return without starting another server.
                         reopened = subprocess.run([str(powershell), '-NoProfile', '-ExecutionPolicy', 'RemoteSigned', '-File', str(clone / 'Open Job Finder.ps1'), '-NoPause'], cwd=base, env=env, capture_output=True, text=True, timeout=20)
