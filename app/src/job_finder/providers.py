@@ -177,8 +177,9 @@ def _resolve_executable(provider: str, executable: str | None = None) -> list[st
                 for arch, triple in architectures:
                     if provider == "codex":
                         candidates += [
-                            node_modules / package / "vendor" / triple / "codex/codex.exe"
+                            node_modules / package / "vendor" / triple / folder / "codex.exe"
                             for package in ("@openai/codex", f"@openai/codex-win32-{arch}")
+                            for folder in ("bin", "codex")
                         ]
                     else:
                         candidates.append(node_modules / f"@anthropic-ai/claude-code-win32-{arch}/claude.exe")

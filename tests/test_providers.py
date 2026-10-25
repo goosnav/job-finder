@@ -247,7 +247,8 @@ def test_windows_git_bash_discovery_uses_git_install_instead_of_other_bash(tmp_p
     assert environment["CLAUDE_CODE_GIT_BASH_PATH"] == str(git / "bin/bash.exe")
 
 
-def test_windows_codex_native_package_prefers_the_os_architecture(tmp_path, monkeypatch):
+@pytest.mark.parametrize("binary_folder", ["codex", "bin"])
+def test_windows_codex_native_package_prefers_the_os_architecture(binary_folder, tmp_path, monkeypatch):
     monkeypatch.setattr(providers.sys, "platform", "win32")
     monkeypatch.setattr(providers, "_install_directories", lambda: [tmp_path])
     monkeypatch.setattr(providers.shutil, "which", lambda value: None)
@@ -256,7 +257,7 @@ def test_windows_codex_native_package_prefers_the_os_architecture(tmp_path, monk
     monkeypatch.setenv("PROCESSOR_ARCHITECTURE", "AMD64")
     binaries = []
     for arch, triple in (("x64", "x86_64-pc-windows-msvc"), ("arm64", "aarch64-pc-windows-msvc")):
-        binary = tmp_path / "node_modules" / f"@openai/codex-win32-{arch}" / "vendor" / triple / "codex/codex.exe"
+        binary = tmp_path / "node_modules" / f"@openai/codex-win32-{arch}" / "vendor" / triple / binary_folder / "codex.exe"
         binary.parent.mkdir(parents=True)
         binary.touch()
         binaries.append(binary)
