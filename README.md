@@ -222,4 +222,6 @@ Run `uv run --project app python scripts/smoke_gui.py` for GUI checks in an auto
 
 Run `uv run --project app python scripts/smoke_agent_recovery.py` on macOS or Linux to check consent, both provider adapters, recovery, retry, and Quit with local CLI fixtures. It makes no live calls.
 
-Tests cover SQLite/API/CLI flows, ranking, model routes, resumability, budgets, subprocess contracts, source restrictions, atomic résumé intake, and exports. A live Claude web task passed with existing sign-in. Current Codex attempts reached the provider but returned `model_unavailable` for this account. Choose an available model or another installed agent. Review a small report before you increase its limits.
+On Windows, `scripts/smoke_windows_launcher.py` checks a fresh checkout with developer tools absent from PATH, both agent transports with a real HTTPS child-tool request, offline reopening, persistence, saved startup errors and Quit. CI also installs real Codex and Claude npm packages to check native executable discovery and task-option compatibility without provider sign-in.
+
+Tests cover SQLite/API/CLI flows, ranking, model routes, resumability, budgets, subprocess contracts, source restrictions, atomic résumé intake, and exports. On 2026-10-24, both installed agents completed a live page fetch through the adapter on Linux (Codex 0.163.0 and Claude Code 2.1.283). Live model calls on Windows still require verification with a signed-in Windows account. Review a small report before you increase its limits.

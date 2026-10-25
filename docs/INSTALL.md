@@ -6,7 +6,11 @@ Clone the repository, then double-click **Open Job Finder.cmd**. You can also ru
 
 First setup needs internet and shows progress in the terminal. The browser opens when the app is ready. Keep the terminal open; use **Quit Job Finder** in the app to stop it. Opening the launcher again returns to the running app. After setup, cached launches work offline; job research still needs the network and a signed-in agent.
 
+Each Windows script launch saves a transcript under `%LOCALAPPDATA%\JobFinder\logs\windows-startup-*.log`. If the window closes after a failure, open the latest log to recover the error code and setup output.
+
 If a direct PowerShell launch fails, read the error in its console and use **Open Job Finder.cmd**. CMD sets an execution-policy bypass for its child PowerShell process only. It does not change the system execution policy. Do not change your system policy to launch this app.
+
+Native Windows agent installations are separate from installations inside WSL. Install and sign into the CLI on Windows for the Windows app. Both legacy Node-based and current native npm packages are detected. The app refreshes the child agent's tool PATH from Windows' saved environment, including Node, Git and PowerShell locations; existing proxy and certificate settings carry through. It does not change your system PATH.
 
 ## Command and script preview
 
