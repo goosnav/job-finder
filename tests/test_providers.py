@@ -34,6 +34,7 @@ import time
 from pathlib import Path
 
 args = sys.argv[1:]
+sys.stdin.reconfigure(encoding="utf-8")
 if "--version" in args:
     if os.environ.get("FAKE_VERSION_FAIL"):
         raise SystemExit(1)
@@ -107,10 +108,6 @@ else:
 
 @pytest.fixture
 def fake_cli(tmp_path, monkeypatch):
-    if os.name == "nt":
-        pytest.skip(
-            "This executable fixture uses a POSIX shebang; parser tests run on every OS."
-        )
     executable = tmp_path / "fake-agent"
     executable.write_text(f"#!{sys.executable}\n" + FAKE_CLI, encoding="utf-8")
     executable.chmod(0o700)
@@ -118,6 +115,16 @@ def fake_cli(tmp_path, monkeypatch):
     monkeypatch.setenv("FAKE_LOG", str(log))
     monkeypatch.setenv("JOB_FINDER_CODEX_BIN", str(executable))
     monkeypatch.setenv("JOB_FINDER_CLAUDE_BIN", str(executable))
+    if os.name == "nt":
+        resolve = providers._resolve_executable
+
+        def resolve_fixture(provider, override=None):
+            selected = override or os.getenv(f"JOB_FINDER_{provider.upper()}_BIN")
+            if selected == str(executable):
+                return [sys.executable, str(executable)]
+            return resolve(provider, override)
+
+        monkeypatch.setattr(providers, "_resolve_executable", resolve_fixture)
     return executable, log
 
 
@@ -125,7 +132,7 @@ def fake_cli(tmp_path, monkeypatch):
 def test_success_transport_isolated_prompt_and_usage(provider, fake_cli, tmp_path):
     executable, log = fake_cli
     sentinel = tmp_path / "must-not-exist"
-    prompt = f'Research this literal input: $(touch "{sentinel}") `whoami`; & < >'
+    prompt = f'Research Δ café: $(touch "{sentinel}") `whoami`; & < >'
     result = AgentRunner(
         provider, executable=str(executable), model="test-model", allow_tools=True
     ).run(prompt, SCHEMA)
@@ -196,6 +203,90 @@ def test_claude_approved_access_inherits_config_and_tools(fake_cli, web):
     assert args[args.index("--max-turns") + 1] == "6"
     assert args[args.index("--max-budget-usd") + 1] == "0.5"
     assert json.loads(args[args.index("--json-schema") + 1]) == SCHEMA
+
+
+def test_claude_bypass_also_disables_the_optional_shell_sandbox(fake_cli):
+    executable, log = fake_cli
+    AgentRunner("claude", executable=str(executable), allow_tools=True).run("Research", SCHEMA)
+    args = json.loads(log.read_text())['argv']
+    assert json.loads(args[args.index('--settings') + 1]) == {"sandbox": {"enabled": False}}
+
+
+def test_windows_children_receive_recovered_tool_path_without_changing_parent(tmp_path, monkeypatch):
+    tools = tmp_path / "Newly installed tools Δ"
+    tools.mkdir()
+    helper = tools / "job-finder-network.exe"
+    helper.touch()
+    helper.chmod(0o700)
+    monkeypatch.setattr(providers.sys, "platform", "win32")
+    monkeypatch.setattr(providers, "_install_directories", lambda: [tools])
+    monkeypatch.setenv("PATH", str(tmp_path / "Old Explorer PATH"))
+    monkeypatch.setenv("HTTPS_PROXY", "http://test-proxy.invalid:8080")
+    before = dict(os.environ)
+    code, out, err = providers._execute(
+        [sys.executable, "-c", "import json,os,shutil; print(json.dumps([shutil.which('job-finder-network.exe'),os.getenv('HTTPS_PROXY')]))"],
+        cwd=str(tmp_path), timeout=10, max_bytes=4096,
+    )
+    assert code == 0, err
+    assert json.loads(out) == [str(helper), "http://test-proxy.invalid:8080"]
+    assert dict(os.environ) == before
+
+
+def test_windows_git_bash_discovery_uses_git_install_instead_of_other_bash(tmp_path, monkeypatch):
+    system = tmp_path / "System32"
+    git = tmp_path / "Custom Git"
+    for directory in (system, git / "bin", git / "cmd"):
+        directory.mkdir(parents=True)
+    (system / "bash.exe").touch()  # A WSL/other bash launcher is not Git Bash.
+    (git / "bin/bash.exe").touch()
+    (git / "bin/git.exe").touch()
+    monkeypatch.setattr(providers.sys, "platform", "win32")
+    monkeypatch.setattr(providers, "_install_directories", lambda: [system, git / "cmd"])
+    monkeypatch.delenv("CLAUDE_CODE_GIT_BASH_PATH", raising=False)
+    environment = providers._agent_environment([sys.executable])
+    assert environment["CLAUDE_CODE_GIT_BASH_PATH"] == str(git / "bin/bash.exe")
+
+
+@pytest.mark.parametrize("binary_folder", ["codex", "bin"])
+@pytest.mark.parametrize("layout", ["hoisted", "nested"])
+def test_windows_codex_native_package_prefers_the_os_architecture(binary_folder, layout, tmp_path, monkeypatch):
+    monkeypatch.setattr(providers.sys, "platform", "win32")
+    monkeypatch.setattr(providers, "_install_directories", lambda: [tmp_path])
+    monkeypatch.setattr(providers.shutil, "which", lambda value: None)
+    monkeypatch.delenv("JOB_FINDER_CODEX_BIN", raising=False)
+    monkeypatch.setenv("PROCESSOR_ARCHITEW6432", "ARM64")
+    monkeypatch.setenv("PROCESSOR_ARCHITECTURE", "AMD64")
+    binaries = []
+    for arch, triple in (("x64", "x86_64-pc-windows-msvc"), ("arm64", "aarch64-pc-windows-msvc")):
+        modules = tmp_path / "node_modules"
+        if layout == "nested":
+            modules = modules / "@openai/codex/node_modules"
+        binary = modules / f"@openai/codex-win32-{arch}" / "vendor" / triple / binary_folder / "codex.exe"
+        binary.parent.mkdir(parents=True)
+        binary.touch()
+        binaries.append(binary)
+    assert providers._resolve_executable("codex") == [str(binaries[1])]
+
+
+@pytest.mark.parametrize("layout", ["npm-bin", "npm-platform", "npm-platform-nested"])
+def test_windows_claude_current_native_npm_install_is_discovered(layout, tmp_path, monkeypatch):
+    monkeypatch.setattr(providers.sys, "platform", "win32")
+    monkeypatch.setattr(providers, "_install_directories", lambda: [tmp_path])
+    monkeypatch.setattr(providers.shutil, "which", lambda value: None)
+    monkeypatch.delenv("JOB_FINDER_CLAUDE_BIN", raising=False)
+    monkeypatch.setenv("PROCESSOR_ARCHITECTURE", "AMD64")
+    monkeypatch.delenv("PROCESSOR_ARCHITEW6432", raising=False)
+    suffix = {
+        "npm-bin": "@anthropic-ai/claude-code/bin/claude.exe",
+        "npm-platform": "@anthropic-ai/claude-code-win32-x64/claude.exe",
+        "npm-platform-nested": "@anthropic-ai/claude-code/node_modules/@anthropic-ai/claude-code-win32-x64/claude.exe",
+    }[layout]
+    binary = tmp_path / "node_modules" / suffix
+    binary.parent.mkdir(parents=True)
+    binary.touch()
+    for ext in ("", ".cmd", ".ps1"):
+        (tmp_path / ("claude" + ext)).write_text("Do not execute a shell shim")
+    assert providers._resolve_executable("claude") == [str(binary)]
 
 
 @pytest.mark.parametrize("provider", ["codex", "claude"])
@@ -343,6 +434,24 @@ def test_cancellation_terminates_child_processes(fake_cli, tmp_path, monkeypatch
         assert error.value.code == "cancelled"
         assert pid_path.exists()
         child_pid = int(pid_path.read_text())
+        if os.name == "nt":
+            import ctypes
+            from ctypes import wintypes
+
+            kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+            kernel.OpenProcess.restype = wintypes.HANDLE
+            kernel.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+            kernel.WaitForSingleObject.argtypes = [wintypes.HANDLE, wintypes.DWORD]
+            kernel.CloseHandle.argtypes = [wintypes.HANDLE]
+            handle = kernel.OpenProcess(0x100000, False, child_pid)  # SYNCHRONIZE
+            if handle:
+                try:
+                    assert kernel.WaitForSingleObject(handle, 2000) == 0, "Agent child survived cancellation"
+                finally:
+                    kernel.CloseHandle(handle)
+            else:
+                assert ctypes.get_last_error() == 87  # process no longer exists
+            return
         try:
             os.kill(child_pid, 0)
         except ProcessLookupError:
@@ -361,10 +470,16 @@ def test_cancellation_terminates_child_processes(fake_cli, tmp_path, monkeypatch
     finally:
         timer.join(timeout=4)
         if pid_path.exists():
-            try:
-                os.kill(int(pid_path.read_text()), signal.SIGKILL)
-            except ProcessLookupError:
-                pass
+            if os.name == "nt":
+                subprocess.run(
+                    [str(Path(os.environ["SystemRoot"]) / "System32/taskkill.exe"), "/PID", pid_path.read_text(), "/T", "/F"],
+                    capture_output=True, timeout=5, check=False,
+                )
+            else:
+                try:
+                    os.kill(int(pid_path.read_text()), signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
 
 
 def test_nonfinite_or_boolean_usage_is_not_reported():

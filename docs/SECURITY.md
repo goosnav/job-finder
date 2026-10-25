@@ -20,11 +20,13 @@ This boundary is intended to resist websites making requests to a local app. It 
 
 `settings.agent_tools_approved` defaults to `false`. Before the first live task, the GUI requires **Allow & run** after it shows the access notice. Approval persists per search. CLI users grant it with `run --allow-agent-tools`; API clients must obtain equivalent consent before setting it to `true`. Revocation blocks future agent tasks.
 
-Approved tasks inherit the user's CLI configuration, connected tools, and existing sign-in. Codex receives `--dangerously-bypass-approvals-and-sandbox`; Claude receives `--dangerously-skip-permissions`. Job Finder adds no tool allowlist, safe mode, or separate restriction on profile/draft tools. Separate CLI hook-trust decisions still apply.
+Approved tasks inherit the user's CLI configuration, connected tools, and existing sign-in. Codex receives `--dangerously-bypass-approvals-and-sandbox`, with `web_search="live"` on research tasks. Claude receives `--dangerously-skip-permissions` and a session-only `sandbox.enabled=false` setting. Disabling Claude's optional shell sandbox also removes its per-domain sandbox network restrictions for this task. Other user settings remain loaded, and managed organization policy still applies. See the [Codex CLI reference](https://developers.openai.com/codex/cli/reference/) and [Claude sandbox documentation](https://code.claude.com/docs/en/sandboxing). Job Finder adds no tool allowlist, safe mode, or separate restriction on profile/draft tools. Separate CLI hook-trust decisions still apply.
 
 The agent can use the internet, run commands, read or change files, and use connected tools under the user's account. Instructions in uploaded documents and webpages can influence those actions. Typed outputs, provenance checks, and human review help assess saved results; they do not confine an approved agent's actions.
 
 The transport uses explicit argument arrays with `shell=False` and passes prompts through stdin. It starts in a temporary working directory. That directory is not a file-access boundary. Standard native and npm installations are detected automatically; npm transports invoke Node.js directly instead of a shell shim. Version probes are advisory. The actual task checks authentication, option support, and access.
+
+On Windows, recovered installation and system tool directories are appended to the agent's child PATH. Proxy, certificate, authentication and provider environment settings are preserved. The parent process and system environment are unchanged. Current native Claude npm executables are launched directly; older JavaScript npm entry points still use Node.
 
 Process input/output sizes, elapsed time, and cancellation are bounded. Provider failures produce stable error codes and recovery steps instead of raw stderr. The protected sign-in endpoint opens only the fixed `codex login` or `claude auth login` command in a native console.
 

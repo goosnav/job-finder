@@ -25,7 +25,19 @@ function Open-RunningJobFinder($runtimeDirectory) {
 }
 
 $setupLock = $null
+$transcriptStarted = $false
+$startupLog = $null
 try {
+    $base = $env:LOCALAPPDATA
+    if (-not $base) { $base = [Environment]::GetFolderPath('LocalApplicationData') }
+    $dataRoot = Join-Path $base 'JobFinder'
+    $logDirectory = Join-Path $dataRoot 'logs'
+    New-Item -ItemType Directory -Force -Path $logDirectory | Out-Null
+    $startupLog = Join-Path $logDirectory ("windows-startup-" + (Get-Date -Format 'yyyyMMdd-HHmmss') + "-$PID.log")
+    Start-Transcript -Path $startupLog | Out-Null
+    $transcriptStarted = $true
+    Write-Host "Startup log: $startupLog"
+
     $processor = $env:PROCESSOR_ARCHITEW6432
     if (-not $processor) { $processor = $env:PROCESSOR_ARCHITECTURE }
     $architecture = switch ($processor) { 'AMD64' { 'x64' } 'ARM64' { 'arm64' } default { '' } }
@@ -45,9 +57,6 @@ try {
             throw "LAUNCH-ROOT: Missing app/$name. Keep the opener beside the complete app folder."
         }
     }
-    $base = $env:LOCALAPPDATA
-    if (-not $base) { $base = [Environment]::GetFolderPath('LocalApplicationData') }
-    $dataRoot = Join-Path $base 'JobFinder'
     $runtimeDirectory = Join-Path $dataRoot 'runtime'
     New-Item -ItemType Directory -Force -Path $runtimeDirectory | Out-Null
     if (Open-RunningJobFinder $runtimeDirectory) { exit 0 }
@@ -116,6 +125,7 @@ try {
     exit $LASTEXITCODE
 } catch {
     Write-Host $_.Exception.Message -ForegroundColor Red
+    if ($startupLog) { Write-Host "Startup details were saved to: $startupLog" }
     Write-Host 'Double-click Open Job Finder.cmd for the Windows launch path. It does not change your system execution policy.'
     if (-not $NoPause -and [Environment]::UserInteractive -and -not [Console]::IsInputRedirected) {
         Read-Host 'Press Enter to close'
@@ -123,4 +133,5 @@ try {
     exit 1
 } finally {
     if ($setupLock) { $setupLock.Dispose() }
+    if ($transcriptStarted) { Stop-Transcript | Out-Null }
 }

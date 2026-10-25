@@ -57,6 +57,13 @@ def _install_directories() -> list[Path]:
         ("LOCALAPPDATA", "Volta/bin"),
         ("ProgramFiles", "nodejs"),
         ("ProgramFiles(x86)", "nodejs"),
+        ("ProgramFiles", "Git/bin"),
+        ("ProgramFiles", "Git/cmd"),
+        ("ProgramFiles(x86)", "Git/bin"),
+        ("ProgramFiles(x86)", "Git/cmd"),
+        ("LOCALAPPDATA", "Programs/Git/bin"),
+        ("SystemRoot", "System32"),
+        ("SystemRoot", "System32/WindowsPowerShell/v1.0"),
         ("NVM_SYMLINK", ""),
         ("VOLTA_HOME", "bin"),
     ):
@@ -83,6 +90,43 @@ def _install_directories() -> list[Path]:
     else:
         roots += [Path("/opt/homebrew/bin"), Path("/usr/local/bin"), Path("/usr/bin")]
     return list(dict.fromkeys(roots))
+
+
+def _agent_environment(command: list[str]) -> dict[str, str]:
+    """Carry recovered Windows tool locations into the agent and its children.
+
+    Explorer may still have the PATH from before Node/Git/the CLI was installed.
+    Finding the agent by absolute path alone does not repair its tool environment.
+    Keep sign-in, proxy, certificate and provider settings; change only this child.
+    """
+    environment = os.environ.copy()
+    if sys.platform != "win32":
+        return environment
+    paths = [part for part in environment.get("PATH", "").split(os.pathsep) if part]
+    seen = {ntpath.normcase(part.strip('"')) for part in paths}
+    directories = [Path(command[0]).parent, *_install_directories()]
+    for directory in directories:
+        value = str(directory)
+        if directory.is_dir() and ntpath.normcase(value) not in seen:
+            paths.append(value)
+            seen.add(ntpath.normcase(value))
+    environment["PATH"] = os.pathsep.join(paths)
+    if not environment.get("CLAUDE_CODE_GIT_BASH_PATH"):
+        for directory in directories:
+            # Registry PATH usually contains Git/cmd. Git Bash lives in Git/bin.
+            # Do not select System32/bash.exe (WSL) as a Git Bash installation.
+            bash = next(
+                (
+                    path
+                    for path in (directory / "bash.exe", directory.parent / "bin/bash.exe")
+                    if path.is_file() and (path.parent / "git.exe").is_file()
+                ),
+                None,
+            )
+            if bash:
+                environment["CLAUDE_CODE_GIT_BASH_PATH"] = str(bash)
+                break
+    return environment
 
 
 def _resolve_executable(provider: str, executable: str | None = None) -> list[str]:
@@ -122,15 +166,34 @@ def _resolve_executable(provider: str, executable: str | None = None) -> list[st
     for root in package_roots:
         for node_modules in (root / "node_modules", root.parent / "lib/node_modules"):
             entries.append(node_modules / _NPM_ENTRIES[provider])
-            if provider == "codex" and sys.platform == "win32":
-                for arch, triple in (
+            if sys.platform == "win32":
+                architectures = [
                     ("x64", "x86_64-pc-windows-msvc"),
                     ("arm64", "aarch64-pc-windows-msvc"),
-                ):
-                    candidates += [
-                        node_modules / package / "vendor" / triple / "codex/codex.exe"
-                        for package in ("@openai/codex", f"@openai/codex-win32-{arch}")
-                    ]
+                ]
+                processor = os.getenv("PROCESSOR_ARCHITEW6432") or os.getenv("PROCESSOR_ARCHITECTURE", "")
+                if processor.upper() == "ARM64":
+                    architectures.reverse()
+                for arch, triple in architectures:
+                    if provider == "codex":
+                        main_package = node_modules / "@openai/codex"
+                        vendors = [
+                            main_package / "vendor",
+                            node_modules / f"@openai/codex-win32-{arch}/vendor",
+                            main_package / f"node_modules/@openai/codex-win32-{arch}/vendor",
+                        ]
+                        candidates += [
+                            vendor / triple / folder / "codex.exe"
+                            for vendor in vendors
+                            for folder in ("bin", "codex")
+                        ]
+                    else:
+                        candidates += [
+                            modules / f"@anthropic-ai/claude-code-win32-{arch}/claude.exe"
+                            for modules in (node_modules, node_modules / "@anthropic-ai/claude-code/node_modules")
+                        ]
+                if provider == "claude":
+                    candidates.append(node_modules / "@anthropic-ai/claude-code/bin/claude.exe")
     for candidate in candidates:
         if candidate.is_file() and candidate.suffix.lower() not in {
             ".cmd",
@@ -310,7 +373,8 @@ def open_provider_login(provider: str) -> dict[str, Any]:
     try:
         if sys.platform == "win32":
             subprocess.Popen(
-                command, shell=False, creationflags=getattr(subprocess, "CREATE_NEW_CONSOLE", 0x10)
+                command, shell=False, env=_agent_environment(command),
+                creationflags=getattr(subprocess, "CREATE_NEW_CONSOLE", 0x10)
             )
         elif sys.platform == "darwin":
             shell_command = shlex.join(command)
@@ -418,6 +482,7 @@ def _execute(
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             cwd=cwd,
+            env=_agent_environment(argv),
             shell=False,
             start_new_session=os.name != "nt",
             creationflags=(
@@ -798,6 +863,8 @@ class AgentRunner:
                 argv = [
                     *command,
                     "--dangerously-skip-permissions",
+                    "--settings",
+                    '{"sandbox":{"enabled":false}}',
                     "-p",
                     "--output-format",
                     "json",

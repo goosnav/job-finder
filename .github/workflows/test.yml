@@ -26,6 +26,14 @@ jobs:
       - run: uv run --project app python scripts/launcher/test_packaging.py
       - run: uv run --project app python app/run.py --help
       - if: runner.os == 'Windows'
+        name: Install real Windows agent CLIs
+        shell: pwsh
+        run: npm install --global --prefix "$env:RUNNER_TEMP\Job Finder Agent Contracts" --no-audit --no-fund @openai/codex@0.164.0 @anthropic-ai/claude-code@2.1.310
+      - if: runner.os == 'Windows'
+        name: Check real Windows agent discovery and options without sign-in
+        shell: pwsh
+        run: uv run --project app python scripts/smoke_windows_installed_agents.py --prefix "$env:RUNNER_TEMP\Job Finder Agent Contracts"
+      - if: ${{ !cancelled() && runner.os == 'Windows' }}
         run: uv run --project app python scripts/smoke_windows_launcher.py
       - if: runner.os == 'Linux'
         run: uv run --project app playwright install --with-deps chromium

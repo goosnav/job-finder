@@ -47,11 +47,11 @@ The script also fails on uncaught JavaScript errors and unexpected HTTP errors. 
 
 The production GUI check and both-provider consent/recovery check passed. These include duplicate-submission prevention, preserved inputs, retry, and actual shutdown. An independent repeat of the main workflow also passed.
 
-The unit suite passed 273 tests with one existing warning. Ruff passed.
+The unit suite passed 283 tests with one existing warning. Ruff and packaging checks passed. Transport fixtures now run on Windows as well as macOS and Linux, including cancellation of child processes.
 
-Claude Code 2.1.304 completed a real web task using existing sign-in and reported USD 0.0277. Codex 0.144.1 reached the provider but returned `model_unavailable` for both the inherited and explicitly tested models. The account's model access limits current live Codex use. The GUI offers **Choose model** or the other installed agent. No successful live Codex task is verified for this adapter revision.
+On 2026-10-24, Codex 0.163.0 and Claude Code 2.1.283 each fetched `https://example.com` through the actual adapter on Linux and returned the page title. Claude reported USD 0.299599. Both used the installed CLI sign-in and inherited configuration. These checks do not establish signed-in Windows model execution.
 
-The Windows CI suite checks direct PowerShell under RemoteSigned and the CMD opener. It also runs both npm transports through Node with shell shims present and developer tools absent from PATH. See the [current CI results](https://github.com/goosnav/job-finder/actions/workflows/test.yml). This automated check is not full native-image acceptance.
+The Windows CI suite checks direct PowerShell under RemoteSigned and the CMD opener. Both npm transport fixtures start a child tool by name from a recovered PATH and make an actual public HTTPS request. It checks UTF-8 prompts, permission bypass, live search configuration, Claude's disabled optional shell sandbox, persistence, offline reopening, Quit, and a retained startup-failure transcript. A separate check installs real Codex 0.164.0 and Claude Code 2.1.310 npm packages, discovers their native executables with stale PATH, and requires the real task command to reach sign-in rather than reject its options. See the [current CI results](https://github.com/goosnav/job-finder/actions/workflows/test.yml). This automated check is not full native-image acceptance.
 
 ## Screenshots
 
